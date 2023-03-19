@@ -1,0 +1,5 @@
+Folium
+https://nbviewer.org/github/python-visualization/folium/blob/main/examples/Plugins.ipynb#Timestamped-GeoJSON
+
+Bokeh
+https://towardsdatascience.com/a-complete-guide-to-an-interactive-geographical-map-using-python-f4c5197e23e0
