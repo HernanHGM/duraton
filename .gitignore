@@ -1,9 +1,10 @@
 marcajes
-huesos
+huesos/Machine learning clasico
 sexaje/_data
 geolocalizacion/_data
 geolocalizacion/_results
 *.png
+*.jpg
 *.rar
 *.csv
 *.xlsx
