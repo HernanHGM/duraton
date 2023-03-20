@@ -9,3 +9,4 @@ geolocalizacion/_results
 *.csv
 *.xlsx
 *.xls
+*.h5
