@@ -14,7 +14,7 @@ from sklearn.svm import SVC
 
 # %% CARGO DATOS
 
-file = 'E:\\trabajo_pajaros\\marcajes\\ML sexaje\\Buho Real\\buhos_estudio_arneses.xlsx'
+file = 'E:/duraton/sexaje/_data/buhos_estudio_arneses.xlsx'
 df_original = pd.read_excel (file)
 
 # %% LIMPIEZA DATOS
