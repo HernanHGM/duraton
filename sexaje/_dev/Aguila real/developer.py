@@ -3,8 +3,9 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-
-import funciones_pajaros.f as f
+import sys
+# sys.path.append('C:\\duraton')
+import sexaje.clase_limpieza as f
 
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import RandomForestClassifier

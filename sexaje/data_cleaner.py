@@ -1,11 +1,16 @@
 import pandas as pd
 import numpy as np
 
-class DataframeCleaner:
+class DataCleaner:
     
     def __init__(self, path):
         """
         Inicializa la clase y carga el archivo csv especificado en el argumento file_path.
+        
+        Parámetros:
+        -----------
+        path : str
+            Ruta del archivo csv a cargar en el dataframe.
         """
         self.df = pd.read_csv(path)
 
@@ -20,6 +25,11 @@ class DataframeCleaner:
         """
         Selecciona solo las columnas especificadas en el argumento columns. Si no se especifica ningún valor en columns,
         se seleccionan las columnas "edad", "sexo", "especie", "cola", "izda L", "izda DV", "dcha L" y "dcha DV".
+        
+        Parámetros:
+        -----------
+        columns : list, opcional
+            Lista de nombres de columnas a seleccionar. Por defecto es None, lo que selecciona las columnas predefinidas.
         """
         if columns is None:
             columns = ["especie", "edad", "sexo" 
@@ -31,9 +41,15 @@ class DataframeCleaner:
     def select_rows(self, edad, especie, sexo):
         """
         Selecciona solo las filas en las que se cumplan las condiciones especificadas en los argumentos edad, especie y sexo.
-        age_range: tupla que contiene los límites inferior y superior de edad a seleccionar (por defecto, selecciona todas las edades)
-        sex: lista de valores de sexo a seleccionar (por defecto, selecciona ambos sexos)
-        species: lista de valores de especie a seleccionar (por defecto, selecciona todas las especies)
+        
+        Parámetros:
+        -----------
+        edad : list
+            Lista de edades a seleccionar.
+        especie : str
+            Valor de especie a seleccionar.
+        sexo : list
+            Lista de valores de sexo a seleccionar.
         """
         edad_condition = self.df['edad'].isin(edad)
         especie_condition = self.df['especie'] == especie
@@ -41,6 +57,7 @@ class DataframeCleaner:
         query_string = f"({edad_condition}) and ({especie_condition}) and ({sexo_condition})"
         self.df = self.df.query(query_string)
 
+               
         
     def remove_outliers(self):
         """
@@ -89,9 +106,21 @@ class DataframeCleaner:
     def calculate_correlation(self):
         """
         Calcula la correlacion entre todas las variables numericas y el sexo
+        
+        Returns:
+        -------
+        corr : DataFrame
+            Un DataFrame que contiene la matriz de correlación entre las variables numericas y el sexo
         """
+        # Elimina las columnas "edad" y "especie" del DataFrame original
         corr_df = self.df.drop(["edad", "especie"], axis=1)
+        
+        # Reemplaza los valores de "sexo" con 1 para "Macho" y 0 para "Hembra"
         corr_df['sexo'] = corr_df['sexo'].replace({'Macho':1, 'Hembra':0})
+        
+        # Calcula la matriz de correlación
         corr = corr_df.corr()
+        
+        # Devuelve el DataFrame con la matriz de correlación
         return corr
 
