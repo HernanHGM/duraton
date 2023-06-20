@@ -1,33 +1,55 @@
 import gradio as gr
+from joblib import load
+import numpy as np
 
-def scaler_model_selector(variable):
-    from joblib import load
-    
-    if variable == 'Longitud de pico':
-        file_scaler = 'E:\\trabajo_pajaros\\marcajes\\ML sexaje\\Arpia\\scaler_longpico.pkl'
-        file_model = 'E:\\trabajo_pajaros\\marcajes\\ML sexaje\\Arpia\\model_longpico.pkl'
-    elif variable == 'Altura de pico':
-        file_scaler = 'E:\\trabajo_pajaros\\marcajes\\ML sexaje\\Arpia\\scaler_altopico.pkl'
-        file_model = 'E:\\trabajo_pajaros\\marcajes\\ML sexaje\\Arpia\\model_altopico.pkl'  
-    elif variable == 'Cola':
-        file_scaler = 'E:\\trabajo_pajaros\\marcajes\\ML sexaje\\Arpia\\scaler_cola.pkl'
-        file_model = 'E:\\trabajo_pajaros\\marcajes\\ML sexaje\\Arpia\\model_cola.pkl'  
-    elif variable == 'Peso':
-        file_scaler = 'E:\\trabajo_pajaros\\marcajes\\ML sexaje\\Arpia\\scaler_peso.pkl'
-        file_model = 'E:\\trabajo_pajaros\\marcajes\\ML sexaje\\Arpia\\model_peso.pkl'  
-    elif variable == 'Longitud total':
-        file_scaler = 'E:\\trabajo_pajaros\\marcajes\\ML sexaje\\Arpia\\scaler_longitudtotal.pkl'
-        file_model = 'E:\\trabajo_pajaros\\marcajes\\ML sexaje\\Arpia\\model_longitudtotal.pkl'  
- 
+def scaler_model_selector():
+    path = "E:\\duraton\\sexaje\\_dev\\Aguila real\\model_scaler"
+    file_model = path + '\\classifier.joblib'
+    file_scaler = path + '\\scaler.joblib'
     model = load(file_model) 
     scaler = load(file_scaler)
     
     return model, scaler
 
-def classifier(measured_value, model, scaler):
-    import numpy as np
-        
-    data = np.array([measured_value]).reshape(1, -1)
+
+def calculate_means(L_izda, L_dcha):
+    """
+    Calcula la media entre "izda L" y "dcha L"
+    """
+    L_media = np.nanmean([L_izda, L_dcha])
+    return L_media 
+
+def process_inputs(measured_values):
+    '''
+    En la aplicación se introducen estos datos:
+    'peso'
+    'L izda'
+    'L dcha'
+    
+    El clasificador recibe: 
+    L_media
+    peso
+    
+    Parameters
+    ----------
+    measured_values : iterable
+        valores introducidos por la aplicacion.
+
+    Returns
+    -------
+    processed_data : numpy array
+        array con los datos procesados y con forma (1,2) 
+        para ser leidos por el clasificador
+
+    '''
+    peso, L_izda, L_dcha = measured_values
+    L_media = calculate_means(L_izda, L_dcha)
+    
+    processed_data = [L_media, peso]
+    processed_data = np.array([processed_data]).reshape(1, -1)
+    return processed_data
+
+def classifier(data, model, scaler):
     data_scaled = scaler.transform(data)
     pred = model.predict(data_scaled)
     
@@ -37,33 +59,25 @@ def classifier(measured_value, model, scaler):
     return sexo
 
 
-def complete_classification(variable, measured_value):
-    model, scaler = scaler_model_selector(variable)
-    sexo = classifier(measured_value, model, scaler)
+def complete_classification(*measured_values):
+    model, scaler = scaler_model_selector()
+    data = process_inputs(measured_values)
+    sexo = classifier(data, model, scaler)
     
     return sexo
 
-variables_opcionales = ['Longitud de pico', 'Altura de pico', 'Cola', 'Peso', 'Longitud total']
-title = "Clasificador del sexo de buitre negro"
+title = "Clasificador del sexo de águila real"
 description = """
-Esta aplicación se ha creado para clasificar el sexo de las arpías completamente desarrolladas. 
-Para ello basta con medir la longitud del pico en milímetros.
-
-A ver que nos conocemos:
-    
-    Punto 1: las medidas se meten en MILÍMETROS. Si se mide en centímetros no funciona, tienen que ser MILÍMETROS.
-
-    Punto 2: para los decimales se usan puntos "." o comas ",". Nada más ¿estamos?
-
+Esta aplicación se ha creado para clasificar el sexo de las águilas reales completamente desarrolladas. 
+El modelo de clasificación se ha entrenado con 31 hembras y 34 machos consiguiendo una precisión del 100%
 """
-
 demo = gr.Interface(
     fn=complete_classification,
-    inputs=[gr.Radio(variables_opcionales),
-            gr.Number()],
+    inputs=[gr.Number(label = 'Peso (g)'),
+            gr.Number(label = 'L izda (mm)'),
+            gr.Number(label = 'L dcha (mm)')],
     outputs="text",
     title=title,
     description=description
 )
 demo.launch()
-# demo

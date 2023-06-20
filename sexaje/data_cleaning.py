@@ -1,18 +1,18 @@
 import pandas as pd
 import numpy as np
 
-class DataCleaner:
+class Cleaner:
     
     def __init__(self, path):
         """
-        Inicializa la clase y carga el archivo csv especificado en el argumento file_path.
+        Inicializa la clase y carga el archivo excel especificado en el argumento file_path.
         
         Parámetros:
         -----------
         path : str
             Ruta del archivo csv a cargar en el dataframe.
         """
-        self.df = pd.read_csv(path)
+        self.df = pd.read_excel(path)
 
     def _force_numeric(self):
         """
@@ -32,9 +32,15 @@ class DataCleaner:
             Lista de nombres de columnas a seleccionar. Por defecto es None, lo que selecciona las columnas predefinidas.
         """
         if columns is None:
-            columns = ["especie", "edad", "sexo" 
+            columns = ["especie", "edad", "sexo" ,
+                       'peso', 'antebrazo', 'clave',
                        "izda L", "izda DV", "dcha L", "dcha DV",
-                       "cola"]
+                       "cola", 'rectrix c',
+                       'ancho ala', 'ala d', 'ala v',	
+                       '7º  1ª', 'cañón en 7ª',
+                       'envergadura', 'longitud total',	
+                       'long pico', 'alto pico', 'ancho pico',	
+                       'long cabeza', 'ancho cabeza']
         self.df = self.df[columns]
         self._force_numeric()
         
@@ -54,8 +60,11 @@ class DataCleaner:
         edad_condition = self.df['edad'].isin(edad)
         especie_condition = self.df['especie'] == especie
         sexo_condition = self.df['sexo'].isin(sexo)
-        query_string = f"({edad_condition}) and ({especie_condition}) and ({sexo_condition})"
-        self.df = self.df.query(query_string)
+        # query = f"({edad_condition}) and ({especie_condition}) and ({sexo_condition})"
+        # self.df = self.df.query(query)
+        all_conditions = edad_condition & especie_condition & sexo_condition
+        self.df = self.df[all_conditions]
+        
 
                
         
@@ -63,8 +72,8 @@ class DataCleaner:
         """
         Elimina los outliers de todas las columnas numéricas del dataframe.
         """
-        Q1 = self.df.quantile(0.05)
-        Q3 = self.df.quantile(0.95)
+        Q1 = self.df.quantile(0.05, numeric_only = True)
+        Q3 = self.df.quantile(0.95, numeric_only = True)
         IQR = Q3 - Q1
         lower_bound = Q1 - 1.5 * IQR
         upper_bound = Q3 + 1.5 * IQR
@@ -78,11 +87,11 @@ class DataCleaner:
         Calcula la media entre las columnas "izda DV" y "dcha DV" y crea una nueva columna "DV_media".
         Elimina las columnas 'izda L', 'izda DV', 'dcha L', 'dcha DV'
         """
-        self.df['L_media'] = self.df[['izda L', 'dcha L']].mean(skipna=True)
-        self.df['DV_media'] = self.df[['izda DV', 'dcha DV']].mean(skipna=True)
+        self.df['L_media'] = self.df[['izda L', 'dcha L']].mean(skipna=True, axis=1)
+        self.df['DV_media'] = self.df[['izda DV', 'dcha DV']].mean(skipna=True, axis=1)
         self.df = self.df.drop(['izda L', 'izda DV', 'dcha L', 'dcha DV'], axis=1)
 
-    def remove_rows(self, tolerance):
+    def remove_empty_columns(self, tolerance=0.1):
         """
         Elimina columnas cuyo ratio de vacío (emptiness) es mayor que la tolerancia
         especificada.

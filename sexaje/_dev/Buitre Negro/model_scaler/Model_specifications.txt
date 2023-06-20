@@ -1,0 +1,4 @@
+33 hembras; 43 machos
+features_list: long cabeza  longitud total  L_media  alto pico  DV_media  antebrazo  long pico
+classifier used: LinearDiscriminantAnalysis
+kappa=0.84; accuracy=0.92

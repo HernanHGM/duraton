@@ -1,0 +1,14 @@
+Training sample: 31 females; 34 males
+features_list: L_media
+Scaler: z_score
+Classifier: LogisticRegression
+
+Values obtained during trainning with k-fold=10:
+kappa=1.0; accuracy=1.0
+Training sample: 31 females; 34 males
+features_list: L_media  peso
+Scaler: z_score
+Classifier: LogisticRegression
+
+Values obtained during trainning with k-fold=10:
+kappa=1.0; accuracy=1.0

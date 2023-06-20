@@ -1,6 +1,12 @@
-from sklearn.preprocessing import MinMaxScaler, StandardScaler, LabelEncoder
+from sklearn.preprocessing import LabelEncoder
+import sys
+path = 'E:\\duraton'
+if path not in sys.path:
+    sys.path.append(path)
+    
+from sexaje import parameters
 
-class FeatureScaler:
+class Preprocessor:
     def __init__(self, df):
         self.df = df
         self.label = None
@@ -21,10 +27,10 @@ class FeatureScaler:
         # Crear una copia del DataFrame original para evitar modificar los datos originales
         self.df_encoded = self.df.copy()      
         # Aplicar la codificación a la columna 'sexo'
-        self.df_encoded[self.label] = LabelEncoder.fit_transform(self.df_encoded[self.label])
+        self.df_encoded[self.label] = LabelEncoder().fit_transform(self.df_encoded[self.label])
 
     
-    def scale_numeric_variables(self, scaling_type='min_max'):
+    def feature_scaler(self, scaling_type='min_max'):
         """
         Escala las variables numéricas del DataFrame utilizando 
         el método de escalamiento especificado.
@@ -37,12 +43,8 @@ class FeatureScaler:
         # Crear una copia del DataFrame original para evitar modificar los datos originales
         self.df_scaled = self.df_encoded.copy()
         
-        # Crear un diccionario para almacenar los métodos de escalamiento
-        scaling_methods = {'min_max': MinMaxScaler(),
-                           'z_score': StandardScaler()}
-        
         # Obtener el método de escalamiento correspondiente
-        scaler = scaling_methods.get(scaling_type)
+        scaler = parameters.scaler_dict[scaling_type]
         # Selecciona todas las variables salvo la etiqueta
         features= [col for col in self.df.columns if col != self.label]
         #Escalara las variables

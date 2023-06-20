@@ -43,7 +43,7 @@ def load_data(path, filenames, reindex_data = True):
     full_filenames = (path + '\\' + name for name in filenames) 
     
     li = []
-    date_columns = ['UTC_datetime', 'UTC_date', 'UTC_time']
+    date_columns = ['UTC_datetime']
     for name in full_filenames:
         print(name)
         df = pd.read_csv(name, parse_dates = date_columns)

@@ -1,204 +1,129 @@
 # %% IMPORT LIBRERIAS
-import pandas as pd
-import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
 import sys
-# sys.path.append('C:\\duraton')
-import sexaje.clase_limpieza as f
+path = 'E:\\duraton'
+if path not in sys.path:
+    sys.path.append(path)
 
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
+# OWN LIBRARIES
+from sexaje.data_cleaning import Cleaner
+from sexaje.data_preprocessing import Preprocessor
+from sexaje.model_creation import SelectorClassifier
+from sexaje.model_saving import save_models
+from sexaje import parameters
 
-# %% CARGO DATOS
+# %% CARGA Y LIMPIEZA DATOS
+file = 'E:\\duraton\\sexaje\\_data\\Tabla_2022_09.xlsx'
 
-file = 'E:\\trabajo_pajaros\\marcajes\\Tabla_2022_09.xls'
-df_original = pd.read_excel (file,sheet_name='Hoja1')
+cleaner = Cleaner(file)
+cleaner.select_columns()
+edad = ['adulto', 'joven', 'subadulto']
+especie = 'Águila real'
+sexo = ['macho', 'hembra']
+cleaner.select_rows(edad, especie, sexo)
+cleaner.calculate_means()
+cleaner.remove_empty_columns(0.05)
+cleaner.remove_outliers()
+df_clean = cleaner.df
+# %% LIMPIEZA DE FEATURES
+categorias = ['edad', 'especie']
+features = [x for x in df_clean.columns if x not in categorias]
+preprocessor = Preprocessor(df_clean.loc[:, features])
+preprocessor.label_encoder('sexo')
+scaling_type = 'z_score' #z_score min_max
+preprocessor.feature_scaler(scaling_type)
+df_encoded = preprocessor.df_encoded
+df_scaled = preprocessor.df_scaled
+# %% INFORMACIÓN GENERAL
+conteos = df_clean.groupby(['sexo']).size()
+n_machos = conteos['macho']
+n_hembras = conteos['hembra']
 
-# %% LIMPIEZA DATOS
+conteos_str = f'Training sample: {n_hembras} females; {n_machos} males'
+cm = df_scaled.corr()
+
+# %% BUSQUEDA MEJOR CLASIFICADOR
+SC = SelectorClassifier(df_scaled, 'sexo')
+
+classifier_dict = parameters.classifier_dict
+for key, value in classifier_dict.items():
+    SC.select_best_classifier({key: value})
+models_results = SC.results_by_model
+# Si quisiera elegir otro, quito el que no quiero
+# # SC.results_by_model = models_results.drop('c')
+
+# %% BUSQUEDA MEJORES VARIABLES
+
+SC.select_best_features()
+features_results = SC.results_by_features
+# Uso el peso porque es medida facil de tomar y la clasificacion es mas robusta
+features_results = features_results.drop('L_media')
+
+# %% GUARDO MODELO A PRODUCTIVIZAR
+saving_path = 'E:\\duraton\\sexaje\\_dev\\Aguila real\\model_scaler'
+save_models(df_encoded, 'sexo', conteos_str,
+            features_results, saving_path, scaling_type)
+
+# %% GRÁFICAS
 
 
-label = ['sexo']
-variables = ['peso', 
-             'izda L',	
-             'izda DV',	
-             'dcha L',	
-             'dcha DV',	
-             'ancho ala', 
-             'ala d',	
-             'ala v',	
-             '7º  1ª',	
-             'cañón en 7ª',
-             'antebrazo',	
-             'cola',	
-             'rectrix c',
-             'envergadura',
-             'longitud total',	
-             'long pico',	
-             'alto pico',	
-             'ancho pico',	
-             'long cabeza',	
-             'ancho cabeza',	
-             'clave']
+groups = df_clean.groupby('sexo')
 
-data = f.individual_selection(df_original, 'Águila real', ['adulto', 'joven', 'subadulto'], label, variables)
+# Plot
+fig, ax = plt.subplots()
+ax.margins(0.05) # Optional, just adds 5% padding to the autoscaling
+for name, group in groups:
+    ax.plot(group.L_media, group.cola, marker='o', linestyle='', ms=12, label=name)
+ax.legend()
 
-data_clean = f.remove_outliers(data, label)
-# data_clean = f.drop_nans(data_clean, 0.08)
-data_clean = f.promediado_tarsos(data_clean)
+plt.show()
 
-# # data_scaled, _, _ = f.scaling_encoding(data_clean, label)
-# data_aug = f.feature_augmentation(data_clean)
-# # # # Como he multiplicado variables entre ellas, debo volver a escalar
-# data_scaled, X_scaled, Y_scaled = f.scaling_encoding(data_aug, label)
-cm = data_clean.corr()
-# %%
-# titulos=['Body mass','Tarsus L width', 'Tarsus DV width','Wing length D','Wing length V','Primary 7',\
-#           'Forearm','Tail length','Rectrix','Wingspan','Body length','Bill length',\
-#           'Bill height','Bill width','Head length','Head width','Claw']
-
-# magnitudes=['Weigth (g)','Width(mm)', 'Width (mm)','Length (cm)','Length (cm)','Length (cm)',\
-#           'Length (cm)','Length (cm)','Length (cm)','Length (cm)','Length (cm)','Length (mm)',\
-#           'Length (mm)','Length (mm)','Length (mm)','Length (mm)','Length (mm)']
-#     F,p=f_oneway(M[0],M[1],M[2])
-#     p_valor = '$p=%.1e$' % (p, ) 
-
-#     ax.text(0.7,1.1, p_valor, fontsize=12,
-#             bbox={'facecolor': 'white', 'alpha': 0.5, 'pad': 2},
-#             transform=ax.transAxes) #transform pone x y en funcion de los ejes en vez de como valores abs
-
-from scipy import stats
-def boxplot_per_label(df, label_name, nrows, ncols):
-    # Get the columns names
-    columns = df.columns
-    columns = columns.drop(label_name)
-    n = len(columns)
-    # Create figure and axes 
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(12, 8)) 
-      
-    # Flatten the axes array 
-    axes = axes.flatten() 
-    fig.set_figheight(15)
-    fig.set_figwidth(20)
+# plt.close('all')
+# # categorias = ['sexo', 'edad', 'especie']
+# # features = [x for x in df_clean.columns if x not in categorias]
+# # for i in features:
+# #     df_clean.boxplot(i, by='sexo')
     
-    # Flatten the axes array 
-    axes = axes.flatten() 
-    # Remove the extra axes 
-    for ax in axes[n:]: 
-        fig.delaxes(ax) 
+# import matplotlib.pyplot as plt
+# import scipy.stats as stats
+# import numpy as np
+
+# categorias = ['sexo', 'edad', 'especie']
+# features = [x for x in df_clean.columns if x not in categorias]
+
+# for i in features:
+#     df_clean.boxplot(i, by='sexo')
+#     groups = df_clean.groupby('sexo')[i].apply(list)
     
-    # Iterate over the columns in order to make the boxplots
-    for i, col in enumerate(columns):
-        # Select the axes
-        ax = axes[i]
-        
-        # Create the boxplot
-        df.boxplot(col, by=label_name, ax=ax)
-        ax.set_xlabel('')
-        ax.set_ylabel('unidades')
-        g_data = df.groupby(label_name)[col]
-        g_keys = df.groupby(label_name).groups.keys()
-        b = []
-        for g in g_keys:
-            b.append(groups.get_group(g).dropna())
-        f_val, p_val = stats.f_oneway(*b)
-
-        textstr = 'P-valor: {:.2e}'.format(p_val)
-
-        plt.text(0.75, 0.95, textstr, horizontalalignment='center', verticalalignment='top', transform=ax.transAxes)
-    # plt.tight_layout() 
-    plt.subplots_adjust(top=0.948,
-                        bottom=0.04,
-                        left=0.042,
-                        right=0.992,
-                        hspace=0.34,
-                        wspace=0.247)
-    fig.suptitle('')
-    # Show the figure
-    plt.show()
+#     # Interpolar las distribuciones para tener el mismo número de valores
+#     max_len = max(len(groups[0]), len(groups[1]))
+#     interpolated_groups = [np.interp(np.linspace(0, 1, max_len), np.linspace(0, 1, len(group)), group) for group in groups]
     
-boxplot_per_label(data_clean, 'sexo', 4, 5)
+#     # Calcula la distancia de Jensen-Shannon
+#     p = np.vstack(interpolated_groups)
+#     p = p / np.sum(p, axis=1)[:, np.newaxis]
+#     m = 0.5 * (p[0] + p[1])
+#     distance_js = 0.5 * (stats.entropy(p[0], m) + stats.entropy(p[1], m))
 
-# %%
-def box_plot(data, label): 
-  
-    # Number of columns 
-    n = data.shape[1] 
-  
-    # Number of rows 
-    nrows = n // 2 if n % 2 == 0 else (n // 2) + 1
-      
-    # Create figure and axes 
-    fig, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(12, 8)) 
-      
-    # Flatten the axes array 
-    axes = axes.flatten() 
-      
-    # Remove the extra axes 
-    for ax in axes[n:]: 
-        fig.delaxes(ax) 
-  
-    # Plot box plot for each column  
-    for i, column in enumerate(data.columns): 
-        if column != label: 
-            ax = axes[i] 
-            data.boxplot(column=column, by=label, ax=ax) 
-  
-    fig.suptitle("Box Plot", fontsize=18, y=1.02) 
-    plt.show() 
-  
-box_plot(data_clean, 'sexo')
-# %% SEX ANALYSIS
-var_names = list(data_aug.columns)
-for i in var_names[1:]:
-    data_clean.boxplot(i, by='sexo')
-    # filename = 'E:\\trabajo_pajaros\\marcajes\\ML sexaje\\Aguila real\\graficas\\' + i + '.png'
-    # plt.savefig(filename)
-# %% RESTO DE TEFLÓN
-# linear regression y--> resto teflón X--> longitud total, L8
-from sklearn.linear_model import LinearRegression as LR
-label = ['resto teflón']
-final_var = ['longitud total', 'L media', 'peso', 'cola']
-data_def = data_scaled[final_var + label].copy()
-X = data_def[final_var].values
-y = np.squeeze(data_def[label].values)
+#     # Calcula la distancia de Kolmogorov-Smirnov
+#     n1 = len(interpolated_groups[0])
+#     n2 = len(interpolated_groups[1])
+#     distance_ks = np.abs(stats.ks_2samp(interpolated_groups[0], interpolated_groups[1])[0]) * np.sqrt((n1 + n2) / (n1 * n2))
 
-model = LR().fit(X,y)
-a = model.score(X,y)
-b = model.get_params(deep = True)
-print(a)
-# %% MODELS
-# =============================================================================
-# Classifiers
-# =============================================================================
-RF_C = RandomForestClassifier(n_estimators = 20, max_depth = 2, min_samples_split=10, random_state = 0)
-LogReg = LogisticRegression()
-SVM = SVC()
-LDA = LinearDiscriminantAnalysis()
-KNN_C = KNeighborsClassifier(n_neighbors = 10)
+#     # Calcula la divergencia de Kullback-Leibler
+#     distance_kl = stats.entropy(p[0], p[1])
 
+#     # Anota las métricas de distancia en la gráfica
+#     plt.annotate(f'JS distance: {distance_js:.4f}\nKS distance: {distance_ks:.4f}\nKL divergence: {distance_kl:.4f}',
+#                  xy=(1, 1), xycoords='axes fraction',
+#                  xytext=(-5, -5), textcoords='offset points',
+#                  ha='right', va='top', fontsize=10)
 
-# %% CALCULO MODELOS
-# Se prueban diferentes modelos probando diferente numero de features
-# Los features se seleccionan son Sequential forward selection
-final_var = ['peso', 'cola', 'L media', 'DV media', 'area tarso']
-data_def = data_scaled[label + final_var].copy()
-features = data_def.columns[1:]
-X = data_def[final_var].values
-y = np.squeeze(data_def[label].values)
-
-most_selected_features, kappa_global, accuracy_global = f.best_features(X, y, features, LDA, n_splits = 10, n_features = 4)
-
-
-
-
-# %% SAVE VALUES
-n_features = 5
-results = np.zeros((n_features, 5), dtype=object)
-results[:,0] = most_selected_features
-results[:,1:3] = kappa_global
-results[:,3:5] = accuracy_global
+#     plt.title("")  # Elimina el título generado por boxplot()
+#     plt.xlabel("Sexo")
+#     plt.ylabel(i)
+#     plt.show()
 
