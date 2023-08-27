@@ -1,0 +1,10 @@
+dewpoint temperatura a la que el vapor de agua empieza a condensar depende de la humedad presion...
+indeice ultravioleta: escala linea para saber cuanta radiacion ultravioleta llega
+windchill: sensacion termica producida por el viendo
+windgustkmph: maxima rafaga de viento en un a hora, tiene que ser x veces mayor como minimo que el windspeed, si no es mayor no es una racha de viento
+visibility: kilometros a los que se llega a ver
+cloudcover: porcentaje del cielo cubieirto por nubes, da igual el grosor. Si hay un minimo de nubes no puede ser cobertura cero
+humedad relativa: humedad en ambiente/humedad de saturacion
+presion alta: anticiclon pueden dirigir vientos fuerte
+presion baja: borrasca asciada a precipitaciones
+presion central estabilidad-->volar guay

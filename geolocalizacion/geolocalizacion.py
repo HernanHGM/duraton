@@ -38,7 +38,7 @@ def extract_info(nombre_archivo):
     nombre = partes[2]
     return especie, ID, nombre
 
-def load_data(path, filenames, reindex_data = True):
+def load_data(path, filenames, reindex_data = True, freq = 5, speed_limit = 8):
     # join root_path and filenames into full path
     full_filenames = (path + '\\' + name for name in filenames) 
     
@@ -49,11 +49,44 @@ def load_data(path, filenames, reindex_data = True):
         df = pd.read_csv(name, parse_dates = date_columns)
         df.rename(columns={'device_id': 'ID'}, inplace=True)
         df = remove_outliers(df, columns=['Latitude', 'Longitude'])
+        df = df.loc[df.Altitude_m > 0]
         if reindex_data == True:
-            df = reindex_interpolate(df, freq = 5)
+            df = reindex_interpolate(df, freq = freq)
+            print(freq)
+        df = enriquecer(df, speed_limit)
         li.append(df)
     
     df = pd.concat(li, axis=0, ignore_index=True)
+    return df
+
+def enriquecer(df, speed_limit = 8):
+    # Añadimos la columna de hora
+    df = df.assign(hour=df.UTC_datetime.dt.strftime('%H'))
+    df['hour']= pd.to_datetime(df['hour'], format='%H').dt.time.astype(str)
+
+    # corremos una posicion los datos de posicion
+    df['Latitude_lag'] = df['Latitude'].shift(-1)
+    df['Longitude_lag'] = df['Longitude'].shift(-1)
+    df['Altitude_m_lag'] = df['Altitude_m'].shift(-1)
+    df['UTC_datetime_pre'] = df['UTC_datetime'].shift(-1)
+    df['UTC_datetime_post'] = df['UTC_datetime'].shift(+1)
+    df['time_step_s'] = (df['UTC_datetime_pre'] -
+                         df['UTC_datetime_post']).dt.seconds/2
+    
+    df['month'] = pd.to_datetime(df['UTC_date'], format="%Y/%m/%d").dt.strftime('%B')
+    df['week_number'] = pd.to_datetime(df['UTC_date'], format="%Y/%m/%d").dt.strftime('%W')
+    df['acc'] = np.sqrt(df.acc_x**2 +
+                        df.acc_y**2 +
+                        df.acc_z**2)
+
+    df['mag'] = np.sqrt(df.mag_x**2 +
+                        df.mag_y**2 +
+                        df.mag_z**2)
+    # Calculamos distancias recorridas usando datos de posicion
+    df = calculate_distance_intra_df(df,
+                                     'Latitude_lag', 'Latitude',
+                                     'Longitude_lag', 'Longitude',
+                                     'Altitude_m_lag', 'Altitude_m')
     return df
 # =============================================================================
 # LIMPIEZA
@@ -81,6 +114,7 @@ def remove_outliers(data, columns = None):
 
 def equal_index(df, freq = 5):
     freq_str = str(freq) + 'min'
+    print(freq_str)
     df_ = df.set_index('UTC_datetime')
     start_date = df_.index.min()
     rounded_date = start_date - timedelta(minutes=start_date.minute%freq, 
@@ -111,7 +145,7 @@ def remove_nulls(df, freq = 5):
     condition1 = forward_condition & backward_condition
     
     # Get rows of the new indexes
-    c1 = df.UTC_datetime.dt.minute%freq == 0 # Multiplos de 5
+    c1 = df.UTC_datetime.dt.minute%freq == 0 # Multiplos de freq
     c2 = df.UTC_datetime.dt.second == 0 # Segundos = 0
     condition2 = c1 & c2
 
@@ -134,7 +168,7 @@ def interpolate_clean(df, condition):
     return df_
 
 def reindex_interpolate(df, freq = 5):
-    df2 = equal_index(df) 
+    df2 = equal_index(df, freq) 
     condition = remove_nulls(df2, freq)
     df3 = interpolate_clean(df2, condition)
     
@@ -197,6 +231,139 @@ def calculate_distance(df1, df2):
     distancias['altura'] = d_alt
     
     return distancias
+
+def calculate_distance_intra_df(df, 
+                                col_latitude1, col_latitude2,
+                                col_longitude1, col_longitude2,
+                                col_altitude1, col_altitude2):
+    df = df.copy()
+    lat_arr = df[col_latitude1] - df[col_latitude2]
+    d_lat = deg_km(lat_arr)
+    
+    long_arr = df[col_longitude1] - df[col_longitude2]
+    d_long = deg_km(long_arr)
+    
+    d_alt = abs(df[col_altitude1] - df[col_altitude2])/1000
+    
+
+    df['distance_3D'] = np.sqrt(d_lat**2 + d_long**2 + d_alt**2)
+    df['distance_2D'] = np.sqrt(d_lat**2 + d_long**2) 
+    df['distance_height'] = d_alt
+    
+    return df
+
+def time_groupby(df, freq):
+    """
+    Realiza un agrupamiento temporal y calcula métricas relacionadas con el tiempo de vuelo para un DataFrame dado.
+
+    Parámetros:
+    -----------
+    df : pandas.DataFrame
+        El DataFrame con los datos de vuelo.
+
+    freq : str
+        La frecuencia para el agrupamiento temporal. Puede ser 'daily' o 'hourly'.
+
+    Returns:
+    --------
+    pandas.DataFrame
+        Un DataFrame resultante con el agrupamiento y las métricas calculadas.
+
+    Notas:
+    ------
+    Esta función realiza un agrupamiento temporal según la frecuencia especificada (diaria o por hora) y calcula
+    algunas métricas relacionadas con el tiempo de vuelo, incluyendo la altitud máxima, el tiempo de vuelo total,
+    la distancia 2D recorrida y la distancia vertical recorrida.
+
+    Los parámetros para el agrupamiento y cálculo de métricas están definidos en el diccionario 'params', que contiene
+    las variables por las que se agrupará el DataFrame y el número máximo de segundos permitidos en el tiempo de vuelo
+    según la frecuencia.
+
+    La columna 'flying_stituation' del DataFrame debe contener la información sobre si el pajaro está 'flying' o 'landed'.
+    """
+    params = {'daily': {'groupby_variables': ['UTC_date'],
+                        'max_seconds': 3600*24},
+              'hourly': {'groupby_variables': ['UTC_date', 'hour'],
+                         'max_seconds': 3600}
+              }
+
+    groupby_variables = params[freq]['groupby_variables']
+    dg_fly = df.groupby(groupby_variables)\
+               .agg(mean_altitude=('Altitude_m', 'mean'),
+                    mean_flying_time=('time_step_s', 'mean'),
+                    mean_distance_2D=('distance_2D', 'mean'),
+                    mean_speed=('speed_km_h', 'mean'),
+                    count=('speed_km_h', 'count'))
+                       
+    fly_variables = list(dg_fly.columns)
+    dg_fly = dg_fly.reset_index()
+    dg_fly.UTC_date = dg_fly.UTC_date.astype(str) 
+    # max_flying_time = params[freq]['max_seconds']
+    # dg_fly = dg_fly.assign(flying_time=np.where(dg_fly['flying_time']>max_flying_time, 
+    #                                             max_flying_time, 
+    #                                             dg_fly['flying_time']))
+    return dg_fly, fly_variables
+
+
+def join_fly_weather(dict_weather, df_fly, freq: str):
+    """
+    Combina datos de vuelo y datos meteorológicos según la frecuencia especificada.
+
+    Parámetros:
+    -----------
+    dict_weather : dict
+        Un diccionario que contiene los datos meteorológicos agrupados por frecuencia ('daily' o 'hourly').
+
+    df_fly : pandas.DataFrame
+        El DataFrame con los datos de vuelo.
+
+    freq : str
+        La frecuencia de los datos a combinar. Puede ser 'daily' o 'hourly'.
+
+    Returns:
+    --------
+    pandas.DataFrame, list
+        Un DataFrame resultante con los datos de vuelo y meteorológicos combinados,
+        y una lista de las variables meteorológicas que se han incluido en la combinación.
+
+    Notas:
+    ------
+    Esta función combina datos de vuelo y datos meteorológicos según la frecuencia especificada ('daily' o 'hourly').
+    Los datos meteorológicos deben estar contenidos en el diccionario 'dict_weather', donde las claves son las
+    frecuencias ('daily' o 'hourly') y los valores son los DataFrames correspondientes.
+
+    Para cada frecuencia, se seleccionan diferentes variables meteorológicas para combinar con los datos de vuelo.
+    El resultado de la combinación se realiza utilizando la función merge de pandas y los parámetros de unión
+    ('left_on' y 'right_on') se determinan en función de la frecuencia.
+
+    La función devuelve el DataFrame resultante con los datos combinados y una lista de las variables meteorológicas
+    que se han incluido en la combinación.
+    """
+    df_weather = dict_weather[freq]
+    
+    if freq == 'hourly':
+        weather_variables = ['tempC', 'DewPointC', 
+                             'windspeedKmph', 'pressure', 'visibility', 
+                             'cloudcover', 'precipMM', 'humidity']
+        fly_merge_variables = ['UTC_date', 'hour']
+        weather_merge_variables = ['date', 'time']
+    
+    if freq == 'daily':   
+        totalSunHour = (pd.to_datetime(df_weather['sunset']) -
+                        pd.to_datetime(df_weather['sunrise'])).dt.seconds / 3600
+        df_weather = df_weather.assign(totalSunHour=totalSunHour)
+        weather_variables = ['maxtempC', 'mintempC', 'avgtempC', 
+                             'sunHour', 'totalSunHour', 'uvIndex']
+        fly_merge_variables = ['UTC_date']
+        weather_merge_variables = ['date']
+    
+    weather_selected_variables = weather_variables + weather_merge_variables
+    data_joined = df_fly.merge(df_weather[weather_selected_variables], 
+                               left_on=fly_merge_variables,
+                               right_on=weather_merge_variables, 
+                               how='left')
+    return data_joined, weather_variables
+
 # =============================================================================
 # SNS KERNELS
 # =============================================================================

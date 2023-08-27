@@ -150,7 +150,8 @@ def _json_to_pandas(data):
                                record_path=['astronomy'], 
                                meta=[['date'], ['maxtempC'], 
                                      ['mintempC'], ['avgtempC'],
-                                     ['sunHour'], ['totalSnow_cm']])
+                                     ['sunHour'], ['totalSnow_cm'],
+                                     ['uvIndex']])
     return df_hourly, df_daily
 
 def load_json_and_transformorm_to_dataframe(location_list):
