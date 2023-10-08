@@ -16,31 +16,19 @@ from sexaje.data_preprocessing import Preprocessor
 from sexaje.model_creation import SelectorClassifier
 from sexaje.model_saving import save_models
 from sexaje import parameters
-import geolocalizacion.geolocalizacion as geoloc
+import geolocalizacion.data_processing as dp
 from geolocalizacion.flying_discrimination import FlightAnalyzer
 # %% CARGA Y LIMPIEZA DATOS
 path_enriquecido = "E:\\duraton\\geolocalizacion\\_data\\Gato_enriquecida.csv"
 df = pd.read_csv(path_enriquecido)
-df['acc'] = np.sqrt(df.acc_x**2 +
-                    df.acc_y**2 +
-                    df.acc_z**2)
-
-df['mag'] = np.sqrt(df.mag_x**2 +
-                    df.mag_y**2 +
-                    df.mag_z**2)
 # %% carga segundo dataframe para probar
-path = "E:\\duraton\\geolocalizacion\\_data"
-filenames = geoloc.find_csv_filenames(path)
+path = "E:\\duraton\\geolocalizacion\\_data\\fly\\raw"
+filenames = dp.find_csv_filenames(path)
 bird_name = 'Zorita'
 filenames = [item for item in filenames if bird_name in item]
 
-info_archivos = list(map(geoloc.extract_info, filenames))
-info_pajaros = pd.DataFrame(info_archivos, columns=['especie','ID','nombre'])
-info_pajaros['color'] = pd.Series(['green', 'blue', 'purple', 'red', 'orange'])
 
-
-df = geoloc.load_data(path, filenames, reindex_data=False, speed_limit=1)
-df = df.merge(info_pajaros, how = 'left', on = 'ID')
+df = dp.load_data(path, filenames, reindex_data=False)
 
 
 bird_condition = (df.nombre == bird_name)
@@ -52,7 +40,7 @@ print(f'Se han desechado un {round(100*(len(bird_condition)-len(df))/len(bird_co
  de los datos iniciales')
 print(f'Se va a trabajar con {len(df)} datos')
 # %% DEFINO VUELO Y POSADO
-Fa = FlightAnalyzer()
+Fa = FlightAnalyzer(df)
 x, freq, n_start, n_end = Fa.get_histogram(df, column='speed_km_h')
 params, cov_matrix = Fa.optimize_parameters(x, freq, plot=True)
 uncertain_values = Fa.find_flying_uncertainty(x, freq, params, plot=True)

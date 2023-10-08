@@ -1,7 +1,8 @@
-# %% 1. IMPORTACINO LIBRERÍAS
+# %% 1. IMPORTACION LIBRERÍAS
 import pandas as pd
 import json
 from datetime import datetime, timedelta
+from geopy.distance import geodesic
 
 import requests
 import os
@@ -9,6 +10,9 @@ import os
 from flask import Flask, jsonify
 # %% 2. CREACION FUNCIONES
 
+# =============================================================================
+# DOWNLOAD AND SAVE WEATHER DATA
+# =============================================================================
 def _save_data_to_json(data, filepath):
     # Crear directorio si no existe
     directory = os.path.dirname(filepath)
@@ -23,8 +27,10 @@ def _save_data_to_json(data, filepath):
 app = Flask(__name__)
 
 @app.route('/api/get_weather')
-def get_weather(location='Zorita', start_date='2020-07-01', end_date='2023-01-01'):
-    key = '12ee6540c60e4c5ca13175025231904'
+def get_weather(location: str,
+                start_date: str='2020-01-01',
+                end_date: str='2023-01-01'):
+    key = 'c5183e6cb96f4b8190a103026230309'
     time_period = '1'
     location_format = location.replace(' ', '%20') + ',%20Spain'
     url = f'http://api.worldweatheronline.com/premium/v1/past-weather.ashx?key={key}&q={location_format}&format=json&date={start_date}&enddate={end_date}&tp={time_period}'
@@ -33,7 +39,7 @@ def get_weather(location='Zorita', start_date='2020-07-01', end_date='2023-01-01
     if response.ok:
         data = response.json()
         
-        path = f'E:/duraton/geolocalizacion/_data/weather_data/{location}/'
+        path = f'E:/duraton/geolocalizacion/_data/weather/{location}/'
         file = f'{start_date}.json'
         file_path = os.path.join(path, file)
         
@@ -57,7 +63,8 @@ def _get_new_date(data):
     return new_date    
 
 #### Revisar
-def download_and_save_weather_data(location_list, start_date_dt, stop_date_dt, 
+def download_and_save_weather_data(location_list, 
+                                   start_date_dt, stop_date_dt, 
                                    start_date, original_date):
     for location in location_list:
         print(location, '---------------------------------------------')
@@ -70,17 +77,33 @@ def download_and_save_weather_data(location_list, start_date_dt, stop_date_dt,
         start_date = original_date
         start_date_dt = datetime.strptime(start_date, '%Y-%m-%d')
    
-
-
-# Unused
-def str_to_json(file_path):  
-    with open(file_path, 'rb') as f:
-        content = f.read()
-    # Decodifica el contenido de bytes a una cadena
-    content_str = content.decode('utf-8')
-    data = json.loads(content_str)
-    return data
-
+def load_json_and_transformorm_to_dataframe(location_list):
+    weather_data = {'hourly': {}, 'daily': {}}
+    hourly_data = []
+    daily_data = []
+    for location in location_list:
+        
+        path = f'E:/duraton/geolocalizacion/_data/weather/{location}/'
+        data_by_location = _load_all_json_files_in_directory(path)
+        
+        dfs_hourly = [_json_to_pandas(data)[0] for data in data_by_location]
+        dfs_daily = [_json_to_pandas(data)[1] for data in data_by_location]
+        
+        # Concatenar todos los DataFrames en uno solo
+        merged_hourly = pd.concat(dfs_hourly)
+        merged_daily = pd.concat(dfs_daily)
+        
+        # Agregar columna "location" con los valores correspondientes
+        merged_hourly['location'] = location
+        merged_daily['location'] = location
+        
+        hourly_data.append(merged_hourly)
+        daily_data.append(merged_daily)
+    
+     
+    weather_data['hourly'] =  pd.concat(hourly_data).reset_index(drop=True)
+    weather_data['daily'] = pd.concat(daily_data).reset_index(drop=True)
+    return weather_data
 
 def _load_data_from_json(filepath):
     # Abrir el archivo JSON
@@ -154,48 +177,178 @@ def _json_to_pandas(data):
                                      ['uvIndex']])
     return df_hourly, df_daily
 
-def load_json_and_transformorm_to_dataframe(location_list):
-    weather_data = {'hourly': {}, 'daily': {}}
-    hourly_data = []
-    daily_data = []
-    for location in location_list:
-        
-        path = f'E:/duraton/geolocalizacion/_data/weather_data/{location}/'
-        data_by_location = _load_all_json_files_in_directory(path)
-        
-        dfs_hourly = [_json_to_pandas(data)[0] for data in data_by_location]
-        dfs_daily = [_json_to_pandas(data)[1] for data in data_by_location]
-        
-        # Concatenar todos los DataFrames en uno solo
-        merged_hourly = pd.concat(dfs_hourly)
-        merged_daily = pd.concat(dfs_daily)
-        
-        # Agregar columna "location" con los valores correspondientes
-        merged_hourly['location'] = location
-        merged_daily['location'] = location
-        
-        hourly_data.append(merged_hourly)
-        daily_data.append(merged_daily)
-    
-     
-    weather_data['hourly'] =  pd.concat(hourly_data).reset_index(drop=True)
-    weather_data['daily'] = pd.concat(daily_data).reset_index(drop=True)
-    return weather_data
+
 
 def save_weather_dataframe(weather_dict):
-    folder_path = 'E:/duraton/geolocalizacion/_data/weather_data/all_locations/'
+    folder_path = 'E:/duraton/geolocalizacion/_data/weather/all_locations/'
     for time_period, dataframe in weather_dict.items():
         file_name = f'{time_period}.csv'
         file_path = os.path.join(folder_path, file_name)
         dataframe.to_csv(file_path)
-        
-def load_weather_dataframe():
-    directory = 'E:/duraton/geolocalizacion/_data/weather_data/all_locations'
-    weather_dict = {}
-    for filename in os.listdir(directory):
+
+# =============================================================================
+# JOIN WEATHER AND FLYING DATA
+# =============================================================================
+def load_weather_dataframe(directory: str='E:/duraton/geolocalizacion/_data/weather/all_locations'):
+    '''
+    loads csv directory and generates dataframes that are stored in a directory
+    The three dataframe are merged into a complete dataframe.
+    To load all files automatically: 
+        filenames_list = os.listdir(directory)
         if filename.endswith('.csv'):
-            filepath = os.path.join(directory, filename)
+        filename = filename.replace('.csv', '')
+
+    Parameters
+    ----------
+    directory : str, optional
+        directory were daily, hourly weather from villages and its coordinates 
+        are sotred in three dataframes. 
+        The default is 'E:/duraton/geolocalizacion/_data/weather/all_locations'.
+
+    Returns
+    -------
+    weather_dict : dict
+        dictionary with three dataframes: 
+            village coordinates dataframe.
+            village hourly weather dataframe
+            village daily weather dataframe
+    '''
+    weather_dict = {}
+    filenames_list = ['hourly', 'daily', 'coordinates']
+    for filename in filenames_list:
+            filepath = os.path.join(directory, '.'.join([filename,'csv']))
             csv_data = pd.read_csv(filepath, index_col=0)
-            filename = filename.replace('.csv', '')
             weather_dict[filename] = csv_data
     return weather_dict
+
+def find_nearest_location(row: pd.Series, locations_df: pd.DataFrame):
+    '''
+    Given a row of a dataframe containing a Latitude and Longitude column
+    and a Dataframe containing several locations with their respective
+    Latitudes and longitudes, returns the name of the closest location.
+
+    Parameters
+    ----------
+    row : pd.Series
+        row of the dataframe whose closest location we want to know.
+        Mainly the dataframe contains flying bird data
+    locations_df : pd.DataFrame
+        Dataframe with several locations and their latitude, longitude and 
+        Altitude.
+
+    Returns
+    -------
+    closest_location : str
+        Name of the closest location to the row.
+
+    '''
+    location_coords = list(zip(locations_df['Latitude'], 
+                                locations_df['Longitude']))
+    distances = [geodesic((row['Latitude'], row['Longitude']), loc).kilometers\
+                  for loc in location_coords]
+    nearest_index = distances.index(min(distances))
+    closest_location = locations_df.index.tolist()[nearest_index]
+    return closest_location
+
+def join_fly_weather(weather_dict, df_fly, freq: str):
+    """
+    Combina datos de vuelo y datos meteorológicos según la frecuencia especificada.
+
+    Parámetros:
+    -----------
+    weather_dict : dict
+        Un diccionario que contiene los datos meteorológicos agrupados por frecuencia ('daily' o 'hourly').
+
+    df_fly : pandas.DataFrame
+        El DataFrame con los datos de vuelo.
+
+    freq : str
+        La frecuencia de los datos a combinar. Puede ser 'daily' o 'hourly'.
+
+    Returns:
+    --------
+    pandas.DataFrame, list
+        Un DataFrame resultante con los datos de vuelo y meteorológicos combinados,
+        y una lista de las variables meteorológicas que se han incluido en la combinación.
+
+    Notas:
+    ------
+    Esta función combina datos de vuelo y datos meteorológicos según la frecuencia especificada ('daily' o 'hourly').
+    Los datos meteorológicos deben estar contenidos en el diccionario 'dict_weather', donde las claves son las
+    frecuencias ('daily' o 'hourly') y los valores son los DataFrames correspondientes.
+
+    Para cada frecuencia, se seleccionan diferentes variables meteorológicas para combinar con los datos de vuelo.
+    El resultado de la combinación se realiza utilizando la función merge de pandas y los parámetros de unión
+    ('left_on' y 'right_on') se determinan en función de la frecuencia.
+
+    La función devuelve el DataFrame resultante con los datos combinados y una lista de las variables meteorológicas
+    que se han incluido en la combinación.
+    """
+    df_weather = weather_dict[freq]
+    
+    if freq == 'hourly':
+        weather_variables = ['tempC', 'DewPointC', 
+                             'windspeedKmph', 'pressure', 'visibility', 
+                             'cloudcover', 'precipMM', 'humidity']
+        fly_merge_variables = ['UTC_date', 'hour', 'closest_location']
+        weather_merge_variables = ['date', 'time', 'location']
+    
+    if freq == 'daily':   
+        totalSunHour = (pd.to_datetime(df_weather['sunset']) -
+                        pd.to_datetime(df_weather['sunrise'])).dt.seconds / 3600
+        df_weather = df_weather.assign(totalSunHour=totalSunHour)
+        weather_variables = ['maxtempC', 'mintempC', 'avgtempC', 
+                             'sunHour', 'totalSunHour', 'uvIndex']
+        fly_merge_variables = ['UTC_date', 'closest_location']
+        weather_merge_variables = ['date', 'location']
+    
+    weather_selected_variables = weather_variables + weather_merge_variables
+    data_joined = df_fly.merge(df_weather[weather_selected_variables], 
+                               left_on=fly_merge_variables,
+                               right_on=weather_merge_variables, 
+                               how='left')
+    data_joined = data_joined.drop(weather_merge_variables, axis=1)
+    return data_joined, weather_variables
+
+
+# =============================================================================
+# UNUSED FUNCTIONS
+# =============================================================================
+def str_to_json(file_path):  
+    with open(file_path, 'rb') as f:
+        content = f.read()
+    # Decodifica el contenido de bytes a una cadena
+    content_str = content.decode('utf-8')
+    data = json.loads(content_str)
+    return data
+
+def _join_weather_data(df_hourly: pd.DataFrame,
+                       df_daily: pd.DataFrame,
+                       df_coordinates: pd.DataFrame):
+    '''
+    Join in one single dataframe the weather data with hourly and daily 
+    frequency, and the localizations geopositions. Hourly and daily dataframes
+    contains not only different frequency but different variables
+
+    Parameters
+    ----------
+    df_hourly : pd.DataFrame
+        weather data with hourly frequency.
+    df_daily : pd.DataFrame
+        weather data with daily frequency.
+    df_coordinates : pd.DataFrame
+        Latitude, longitude and altitude of each localization.
+
+    Returns
+    -------
+    df_complete : pd.DataFrame
+        dataframe with the houly, daily and geoposition information joined.
+
+    '''
+    df_weather = df_hourly.merge(df_daily,
+                                 on = ['date', 'location'])
+    df_complete = df_weather.merge(df_coordinates, 
+                                   left_on = 'location',
+                                   right_index=True)
+    return df_complete
+

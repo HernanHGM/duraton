@@ -88,6 +88,23 @@ def get_flying_metrics_aggregates(df, var_gby, plot=False):
         
         fig, axs = plt.subplots(2,2,figsize=(10,6))
         
+        yparams_list = [['mean_atitude', axs[0, 0], 'mean altitude (m)'],
+                       ['distance_2D_by_hour', axs[1, 0], 'displacement by hour (km/h)'],
+                       ['flying_time_percentage', axs[0, 1], 'flying time percentage (%)'],
+                       ['bird_speed', axs[1, 1], 'mean instant speed (km/h)']]
+        fly_params_list = [['flying', 'red']
+                           ['landed', 'blue']]
+        for yparams in yparams_list:
+            for fly_params in fly_params_list:
+                condition = (df_join[fly_col]==fly_params[0])
+                df_join[condition].plot.scatter(x=var_gby,
+                                                y=params[0], 
+                                                ax=params[1], 
+                                                color=fly_params[1], 
+                                                label=fly_params[0],
+                                                xlabel=xlabel_dict[var_gby],
+                                                ylabel=params[2])
+                                         
         df_join[flying].plot.scatter(x=var_gby, y='mean_altitude', ax=axs[0,0],
                                       color='red', label='flying',
                                       xlabel=xlabel_dict[var_gby],
