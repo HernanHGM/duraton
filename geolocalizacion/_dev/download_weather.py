@@ -1,12 +1,5 @@
 # %% 1. IMPORTACION LIBRERÍAS
-import pandas as pd
-import json
-from datetime import datetime, timedelta
-
-import requests
-import os
-
-from flask import Flask, jsonify
+from datetime import date
 
 import sys
 path = 'E:\\duraton'
@@ -15,7 +8,13 @@ if path not in sys.path:
 
 import geolocalizacion.weather as weather
 # %% 2. CREACION FUNCIONES guardadas en weather
+# import pandas as pd
+# form datetime import timedelta
+# import json
+# import requests
+# import os
 
+# from flask import Flask, jsonify
 # def _save_data_to_json(data, filepath):
 #     # Crear directorio si no existe
 #     directory = os.path.dirname(filepath)
@@ -206,25 +205,18 @@ import geolocalizacion.weather as weather
 #             weather_dict[filename] = csv_data
 #     return weather_dict
 # %% 3. DEFINICION VARIABLES
-original_date = '2020-01-01'
-start_date = original_date
-stop_date = '2023-01-01'
-start_date_dt = datetime.strptime(start_date, '%Y-%m-%d')
-stop_date_dt = datetime.strptime(stop_date, '%Y-%m-%d')
+start_date = date(2020,1,1)
+end_date = date(2023,1,1)
 
 location_list = ['Romangordo', 'Deleitosa', 'Torrecillas de la Tiesa', 
                   'Herguijuela', 'Conquista de la Sierra', 'Zorita', 
-                  'Alcollarin', 'Abertura', 'Campo Lugar',
+                  'Alcollarín', 'Abertura', 'Campo Lugar',
                   'Higuera de Albalat', 'Casas de Miravete', 'Almaraz', 
                   'Campillo de Deleitosa', 'Aldeacentenera', 'Madroñera', 
                   'Trujillo', 'Garciaz', 'Santa Cruz de la Sierra']
 
-
 # %% 4. DESCARGA DATOS
-weather.download_and_save_weather_data(location_list, 
-                                       start_date_dt, stop_date_dt, 
-                                       start_date, original_date)
-
+weather.download_and_save_weather_data(location_list, start_date, end_date)
 # %% 5. CARGAMOS y TRANFORMAMOS DATOS
 weather_data = weather.load_json_and_transformorm_to_dataframe(location_list)
 # %% 6. GUARDAMOS DATOS

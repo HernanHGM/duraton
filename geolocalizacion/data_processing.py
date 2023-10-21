@@ -2,22 +2,15 @@
 Created on Thu Jan  5 12:50:28 2023
 
 @author: Hernán García Mayoral
+
+Module of functions dedicated to loaad clean and preprocess data
 """
-import geopandas as gpd
 import pandas as pd
 import numpy as np
-from shapely.geometry import MultiPolygon, Polygon, Point
 import os
-
 from datetime import timedelta
-import matplotlib.pyplot as plt
-import seaborn as sns
-import folium
-from folium import plugins
-from folium.plugins import MarkerCluster, HeatMap
-import webbrowser
+from typing import List
 
-from math import pi
 # =============================================================================
 # IMPORTACION DATOS
 # =============================================================================
@@ -25,7 +18,38 @@ def find_csv_filenames(path_to_dir, suffix=".csv"):
     filenames = os.listdir(path_to_dir)
     return [filename for filename in filenames if filename.endswith(suffix)]
 
-def load_data(path, filenames, reindex_data = True, freq = 5):
+def load_data(path: str, 
+              filenames: List[str], 
+              pre_process: bool=True,
+              reindex_data: bool=True,
+              freq: int=5):
+    """
+    Load and process data from multiple CSV files and return a combined DataFrame.
+    
+    Parameters:
+    -----------
+    path : str
+        The path to the directory containing CSV files.
+    
+    filenames : List[str]
+        A list of file names inside the directory provided by path
+        to be loaded and processed.
+    
+    pre_process : bool, optional
+        Whether to perform data pre-processing. Default is True.
+    
+    reindex_data : bool, optional
+        Whether to reindex and interpolate the data. Default is True.
+    
+    freq : int, optional
+        The frequency for reindexing and interpolation expressed in minutes.
+        Default is 5.
+    
+    Returns:
+    --------
+    pandas.DataFrame
+        A combined DataFrame containing data from multiple CSV files.
+    """
     # join root_path and filenames into full path
     full_filenames = (path + '\\' + name for name in filenames) 
     
@@ -33,20 +57,32 @@ def load_data(path, filenames, reindex_data = True, freq = 5):
     date_columns = ['UTC_datetime']
     for name in full_filenames:
         print(name)
-        df = pd.read_csv(name, parse_dates = date_columns)
-        df.rename(columns={'device_id': 'ID'}, inplace=True)
-        df = remove_outliers(df, columns=['Latitude', 'Longitude'])
-        df = df.loc[df.Altitude_m > 0]
+        df = pd.read_csv(name, 
+                         parse_dates = date_columns, 
+                         index_col=False,
+                         encoding="ISO-8859-1")
+        df = _clean_unnamed(df)
+        if pre_process == True:
+            df.rename(columns={'device_id': 'ID'}, inplace=True)
+            df = _remove_outliers(df, columns=['Latitude', 'Longitude'])
+            df = df.loc[df.Altitude_m > 0]
         if reindex_data == True:
-            df = reindex_interpolate(df, freq = freq)
+            df = _reindex_interpolate(df, freq = freq)
             print(freq)
-        df = enriquecer(df, filenames)
+        if pre_process == True:
+            df = _enriquecer(df, filenames)
         li.append(df)
     
     df = pd.concat(li, axis=0, ignore_index=True)
     return df
 
-def enriquecer(df, filenames):
+def _clean_unnamed(df):
+    columns = df.columns.to_list()
+    unnamed_cols = [col for col in columns if 'Unnamed' in col]
+    df = df.drop(labels=unnamed_cols, axis=1)
+    return df
+
+def _enriquecer(df, filenames):
     # Añadimos la columna de hora
     df = df.assign(hour=df.UTC_datetime.dt.strftime('%H'))
     df['hour']= pd.to_datetime(df['hour'], format='%H').dt.time.astype(str)
@@ -55,9 +91,9 @@ def enriquecer(df, filenames):
     df['month_name'] = pd.to_datetime(df['UTC_date'], format="%Y/%m/%d")\
                          .dt.strftime('%B')
     df['month_number'] = pd.to_datetime(df['UTC_date'], format="%Y/%m/%d")\
-                         .dt.strftime('%-m')
+                         .dt.strftime('%m')
     df['week_number'] = pd.to_datetime(df['UTC_date'], format="%Y/%m/%d")\
-                          .dt.strftime('%w')
+                          .dt.strftime('%W')
                           
     # corremos una posicion los datos de posicion
     df['Latitude_lag'] = df['Latitude'].shift(-1)
@@ -94,7 +130,7 @@ def extract_info(nombre_archivo):
 # =============================================================================
 # LIMPIEZA
 # =============================================================================
-def remove_outliers(data, columns = None):
+def _remove_outliers(data, columns = None):
 
     data_o = data.copy()
     if columns != None:
@@ -156,10 +192,10 @@ def remove_nulls(df, freq = 5):
     return condition
 
 def interpolate_clean(df, condition):
-    # Same datetim column
+    # Same datetime column
     dates = df.UTC_datetime
     dates = dates[condition]
-    # Drop datime columns
+    # Drop datetime columns
     df_ = df.drop(labels = ['UTC_datetime', 'UTC_date', 'UTC_time'], axis = 1)
 
     df_ = df_.interpolate(method ='linear', limit_direction ='forward')
@@ -170,7 +206,7 @@ def interpolate_clean(df, condition):
         
     return df_
 
-def reindex_interpolate(df, freq = 5):
+def _reindex_interpolate(df, freq = 5):
     df2 = equal_index(df, freq) 
     condition = remove_nulls(df2, freq)
     df3 = interpolate_clean(df2, condition)

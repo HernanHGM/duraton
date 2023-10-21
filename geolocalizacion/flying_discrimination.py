@@ -38,7 +38,7 @@ class FlightAnalyzer:
         data = np.array(self.df[column])
         n_start = min(data)
         n_end = max(data)
-        n_bins = n_end - n_start
+        n_bins = int(n_end - n_start)
     
         freq, x = np.histogram(data, n_bins, density=True)
         

@@ -52,15 +52,17 @@ def _get_location_info(municipio):
             'Longitude': longitud_value,
             'Altitude': altitude_value
         }
-
+        
         return municipio_info  # Devolver la información en formato JSON
 
     except requests.exceptions.RequestException as e:
-        return f'Error en la solicitud web: {e}', 500
+        print(f'Municipio_info for {municipio} was not created')
+        print(f'Error en la solicitud web: {e}', 500)
 
 
-
-def download_location_info(location_list: list, app=app):
+def download_location_info(location_list: list, 
+                           save: bool=False, 
+                           app: Flask=app):
     '''
     Llama a la funcion _get_location_info para descargar la informacion de 
     la lista de municpios indicados.
@@ -80,12 +82,14 @@ def download_location_info(location_list: list, app=app):
         location_list = ['Romangordo', 'Deleitosa', 'Torrecillas de la Tiesa', 
                           'Herguijuela', 'Conquista de la Sierra', 'Zorita', 
                           'Alcollarín']
+    save : bool, optional
+        save=True guarda el dataFrame
     app : Flask, optional
         La app que genera la llamada a la url de la que se descargan datos.
 
     Returns
     -------
-    df_info : pd.DataFrame
+    df_coordinates : pd.DataFrame
         dataframe con la información de cada municipio.
     '''
     if isinstance(location_list, str):
@@ -93,6 +97,12 @@ def download_location_info(location_list: list, app=app):
     with app.app_context():
         info_list = [_get_location_info(location) for location in location_list]
     
-    df_info = pd.DataFrame(info_list)
-    return df_info
+    # Clean in case of error only properly created jsons are used
+    info_list = [item for item in info_list if isinstance(item, dict)]
+    df_coordinates = pd.DataFrame(info_list)
+    
+    if save==True:
+        path = 'E:/duraton/geolocalizacion/_data/weather/all_locations/coordinates.csv'
+        df_coordinates.to_csv(path, index=False, encoding="ISO-8859-1")
+    return df_coordinates
 

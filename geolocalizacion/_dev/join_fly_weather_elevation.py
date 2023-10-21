@@ -14,50 +14,47 @@ import geolocalizacion.data_processing as dp
 from geolocalizacion.elevation import ElevationLoader, FlyElevationJoiner
 from geolocalizacion.flying_discrimination import FlightAnalyzer
 
-
-# %% IMPORT BIRDS DATA
-
+# %% DEFINE PATHS
 path = "E:\\duraton\\geolocalizacion\\_data\\fly\\raw"
 filenames = dp.find_csv_filenames(path)
 nombre = 'Zorita'
 filenames = [item for item in filenames if nombre in item]
 
-df = dp.load_data(path, filenames, reindex_data=False)
-# %% IMPORT WEATHER DATA
-def get_closest_weather(df_fly, weather_dict):
-    df_fly['closest_location'] = df_fly.apply(weather.find_nearest_location, 
-                                              args=(weather_dict['coordinates'],), 
-                                              axis=1)
-    df_fly, _ = weather.join_fly_weather(weather_dict, df_fly, freq='hourly')
-    df_fly, _ = weather.join_fly_weather(weather_dict, df_fly, freq='daily')
-    return df_fly
-weather_dict = weather.load_weather_dataframe()
-df = get_closest_weather(df, weather_dict)
+# %% IMPORT BIRDS DATA
+df_fly = dp.load_data(path, filenames, reindex_data=False)
 # %% CALCULATE FLYING POSITIONS
 plt.close('all')
-Fa = FlightAnalyzer(df)
+Fa = FlightAnalyzer(df_fly)
 x, freq, n_start, n_end = Fa.get_histogram(column='speed_km_h')
 params, cov_matrix = Fa.optimize_parameters(x, freq, plot=True)
 uncertain_values = Fa.find_flying_uncertainty(x, freq, params, plot=True)
-df = Fa.define_flying_situation(uncertain_values)
-df.boxplot('speed_km_h', by='flying_situation')
+df_fly = Fa.define_flying_situation(uncertain_values)
+df_fly.boxplot('speed_km_h', by='flying_situation')
 # %% LOAD & JOIN ELEVATION TERRAIN
 el = ElevationLoader()
-df_elevation = el.load_necessary_files(df)
+df_elevation = el.load_necessary_files(df_fly)
 fej = FlyElevationJoiner()
 
-df_joined = fej.fly_elevation_join(df, df_elevation)
-# %%
-path_enriquecido = f"E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida\\{nombre}_enriquecida.csv"
-df_joined.to_csv(path_enriquecido, index=False)
-# %%
-df_load = pd.read_csv(path_enriquecido)
+df_fly_elevation= fej.fly_elevation_join(df_fly, df_elevation)
+# %% SAVE FLY & ELEVATION DATA
+path_elevation = f"E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation\\{nombre}_elevation.csv"
 
-# %% UNIMOS DATOS PUROS CON DATOS TIEMPO
-freq = 'hourly'
-df_fly_weather, weather_variables = geoloc.join_fly_weather(romangordo_dict, 
-                                                            df_gato_fin, freq)
+df_fly_elevation.to_csv(path_elevation, index=False, encoding="ISO-8859-1")
+# %% READ FLY & ELEVATION DATA
+df_fly_elevation = pd.read_csv(path_elevation,
+                               index_col=False, 
+                               encoding="ISO-8859-1")
 
-# fly_variables = ['Altitude_m', 'situacion', 'time_step_s', 'distance_2D']
-# df_fly_weather = df_fly_weather[weather_variables + fly_variables]
+# %% IMPORT WEATHER DATA
+weather_dict = weather.load_weather_dataframe()
 
+# %% JOIN FLY & WEATHER DATA
+df_fly_elevation_weather = weather.get_closest_weather(df_fly_elevation, 
+                                                       weather_dict)
+
+# %% SAVE FLY & ELEVATION & WEATHER DATA
+path_elevation_weather = f"E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation_weather\\{nombre}_elevation_weather.csv"
+
+df_fly_elevation_weather.to_csv(path_elevation_weather,
+                                index=False,
+                                encoding="ISO-8859-1")

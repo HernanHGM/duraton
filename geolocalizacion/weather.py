@@ -1,27 +1,62 @@
+"""
+Created on Sun Oct  8 11:57:45 2023
+
+@author: Hernán_HGM
+
+Download weather data from api http://worldweatheronline.com in json format
+Generate CSVs with data from all locations unified
+"""
 # %% 1. IMPORTACION LIBRERÍAS
 import pandas as pd
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from geopy.distance import geodesic
 
 import requests
 import os
+from typing import Dict, List
 
 from flask import Flask, jsonify
 # %% 2. CREACION FUNCIONES
 
 # =============================================================================
 # DOWNLOAD AND SAVE WEATHER DATA
-# =============================================================================
-def _save_data_to_json(data, filepath):
-    # Crear directorio si no existe
-    directory = os.path.dirname(filepath)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    
-    # Guardar los datos en formato JSON
-    with open(filepath, 'w') as outfile:
-        json.dump(data, outfile)
+# =============================================================================  
+def download_and_save_weather_data(location_list: List[str], 
+                                   start_date: date, 
+                                   end_date: date):
+    '''
+    Download weather data between the specifieds dates for the villages in 
+    location_list. The data comes from api http://worldweatheronline.com 
+    in json format
+    Saves the weather data of each village in a folder.
+
+    Parameters
+    ----------
+    location_list : List[str]
+        list of the villages whose weather data is downloades.
+    start_date : date
+        initial date of the downloaded data.
+    end_date : date
+        final date of the downloaded data.
+
+    Returns
+    -------
+    None.
+
+    '''
+
+    original_date = start_date
+    for location in location_list:
+        print(location, '---------------------------------------------')
+        while(start_date < end_date):
+            data = get_weather(location=location, 
+                               start_date=start_date.strftime('%Y-%m-%d'),
+                               end_date=end_date.strftime('%Y-%m-%d'))
+            start_date = _get_new_date(data) 
+            print(start_date)
+            
+        start_date = original_date
         
         
 app = Flask(__name__)
@@ -49,6 +84,15 @@ def get_weather(location: str,
 
     return data
 
+def _save_data_to_json(data, filepath):
+    # Crear directorio si no existe
+    directory = os.path.dirname(filepath)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    
+    # Guardar los datos en formato JSON
+    with open(filepath, 'w') as outfile:
+        json.dump(data, outfile)
 
 
 def _get_new_date(data):
@@ -56,28 +100,25 @@ def _get_new_date(data):
     last_date = data['data']['weather'][-1]['date']
 
     # Crear una variable new_date con un día más que la última fecha
-    last_date_datetime = datetime.strptime(last_date, '%Y-%m-%d')
-    new_date_datetime = last_date_datetime + timedelta(days=1)
-    new_date = new_date_datetime.strftime('%Y-%m-%d')
+    last_date_datetime = datetime.strptime(last_date, '%Y-%m-%d').date()
+    new_date = last_date_datetime + timedelta(days=1)
     
-    return new_date    
+    return new_date 
+# def _get_new_date(data):
+#     # Obtener la última fecha
+#     last_date = data['data']['weather'][-1]['date']
 
-#### Revisar
-def download_and_save_weather_data(location_list, 
-                                   start_date_dt, stop_date_dt, 
-                                   start_date, original_date):
-    for location in location_list:
-        print(location, '---------------------------------------------')
-        while(start_date_dt < stop_date_dt):
-            data = get_weather(location=location, start_date=start_date)
-            start_date = _get_new_date(data) 
-            start_date_dt = datetime.strptime(start_date, '%Y-%m-%d')
-            print(start_date)
-            
-        start_date = original_date
-        start_date_dt = datetime.strptime(start_date, '%Y-%m-%d')
-   
-def load_json_and_transformorm_to_dataframe(location_list):
+#     # Crear una variable new_date con un día más que la última fecha
+#     last_date_datetime = datetime.strptime(last_date, '%Y-%m-%d')
+#     new_date_datetime = last_date_datetime + timedelta(days=1)
+#     new_date = new_date_datetime.strftime('%Y-%m-%d')
+    
+#     return new_date    
+
+# =============================================================================
+# LOAD JSON AND TRANSFORM TO DATAFRAME
+# =============================================================================    
+def load_json_and_transformorm_to_dataframe(location_list: List[str]):
     weather_data = {'hourly': {}, 'daily': {}}
     hourly_data = []
     daily_data = []
@@ -105,15 +146,6 @@ def load_json_and_transformorm_to_dataframe(location_list):
     weather_data['daily'] = pd.concat(daily_data).reset_index(drop=True)
     return weather_data
 
-def _load_data_from_json(filepath):
-    # Abrir el archivo JSON
-    with open(filepath) as infile:
-        # Cargar los datos desde el archivo
-        data = json.load(infile)
-    
-    # Devolver los datos cargados
-    return data
-
 def _load_all_json_files_in_directory(directory):
     json_data_list = []
     for filename in os.listdir(directory):
@@ -122,6 +154,15 @@ def _load_all_json_files_in_directory(directory):
             json_data = _load_data_from_json(filepath)
             json_data_list.append(json_data)
     return json_data_list
+
+def _load_data_from_json(filepath):
+    # Abrir el archivo JSON
+    with open(filepath) as infile:
+        # Cargar los datos desde el archivo
+        data = json.load(infile)
+    
+    # Devolver los datos cargados
+    return data
 
 def _format_hourly_dataframe(df):
     df = df.astype({'time': 'int',
@@ -178,16 +219,18 @@ def _json_to_pandas(data):
     return df_hourly, df_daily
 
 
-
+# =============================================================================
+# SAVE WEATHER DATAFRAME
+# =============================================================================
 def save_weather_dataframe(weather_dict):
     folder_path = 'E:/duraton/geolocalizacion/_data/weather/all_locations/'
     for time_period, dataframe in weather_dict.items():
         file_name = f'{time_period}.csv'
         file_path = os.path.join(folder_path, file_name)
-        dataframe.to_csv(file_path)
+        dataframe.to_csv(file_path, encoding="ISO-8859-1")
 
 # =============================================================================
-# JOIN WEATHER AND FLYING DATA
+# LOAD WEATHER DATAFRAME
 # =============================================================================
 def load_weather_dataframe(directory: str='E:/duraton/geolocalizacion/_data/weather/all_locations'):
     '''
@@ -217,11 +260,46 @@ def load_weather_dataframe(directory: str='E:/duraton/geolocalizacion/_data/weat
     filenames_list = ['hourly', 'daily', 'coordinates']
     for filename in filenames_list:
             filepath = os.path.join(directory, '.'.join([filename,'csv']))
-            csv_data = pd.read_csv(filepath, index_col=0)
+            csv_data = pd.read_csv(filepath, index_col=0, encoding = "ISO-8859-1")
             weather_dict[filename] = csv_data
     return weather_dict
 
-def find_nearest_location(row: pd.Series, locations_df: pd.DataFrame):
+
+# =============================================================================
+# JOIN WEATHER AND FLYING DATA 
+# =============================================================================
+def get_closest_weather(df_fly: pd.DataFrame, 
+                        weather_dict: Dict[str, pd.DataFrame]):
+    '''
+    Gets the closest village to each bird position to join the weather
+    data from that village.
+    
+    Parameters
+    ----------
+    df_fly : pd.DataFrame
+        Dataframe with the bird flying data
+    weather_dict : Dict[pd.DataFrame]
+        dictionary containing 3 dataframes
+            -coordinates: coordinates of each village.
+            -hourly: weather hourly data from each village 
+            -daily: weather daily data from each village
+    Returns
+    -------
+    df_fly : pd.DataFrame
+        Dataframe with the bird flying data merged with the weather data from
+        the closest village to each point.
+
+    '''
+    
+    df_fly['closest_location'] = df_fly.apply(_find_nearest_location, 
+                                              args=(weather_dict['coordinates'],), 
+                                              axis=1)
+    df_fly, _ = _join_fly_weather(weather_dict, df_fly, freq='hourly')
+    df_fly, _ = _join_fly_weather(weather_dict, df_fly, freq='daily')
+    return df_fly
+
+def _find_nearest_location(row: pd.Series, 
+                           locations_df: pd.DataFrame):
     '''
     Given a row of a dataframe containing a Latitude and Longitude column
     and a Dataframe containing several locations with their respective
@@ -250,39 +328,46 @@ def find_nearest_location(row: pd.Series, locations_df: pd.DataFrame):
     closest_location = locations_df.index.tolist()[nearest_index]
     return closest_location
 
-def join_fly_weather(weather_dict, df_fly, freq: str):
+
+
+def _join_fly_weather(weather_dict: Dict[str, pd.DataFrame],
+                      df_fly: pd.DataFrame,
+                      freq: str):
     """
-    Combina datos de vuelo y datos meteorológicos según la frecuencia especificada.
-
-    Parámetros:
+    Combines flight and weather data based on the specified frequency.
+    
+    Parameters:
     -----------
-    weather_dict : dict
-        Un diccionario que contiene los datos meteorológicos agrupados por frecuencia ('daily' o 'hourly').
-
-    df_fly : pandas.DataFrame
-        El DataFrame con los datos de vuelo.
-
-    freq : str
-        La frecuencia de los datos a combinar. Puede ser 'daily' o 'hourly'.
-
+    weather_dict: dict
+        A dictionary containing weather data grouped by frequency 
+        ('daily' or 'hourly').
+    
+    df_fly: pandas.DataFrame
+        The DataFrame with flight data.
+    
+    freq: str
+        The frequency of the data to be combined. It can be 'daily' or 'hourly'.
+    
     Returns:
     --------
     pandas.DataFrame, list
-        Un DataFrame resultante con los datos de vuelo y meteorológicos combinados,
-        y una lista de las variables meteorológicas que se han incluido en la combinación.
-
-    Notas:
+        A resulting DataFrame with combined flight and weather data and a list 
+        of weather variables that have been included in the combination.
+    
+    Notes:
     ------
-    Esta función combina datos de vuelo y datos meteorológicos según la frecuencia especificada ('daily' o 'hourly').
-    Los datos meteorológicos deben estar contenidos en el diccionario 'dict_weather', donde las claves son las
-    frecuencias ('daily' o 'hourly') y los valores son los DataFrames correspondientes.
-
-    Para cada frecuencia, se seleccionan diferentes variables meteorológicas para combinar con los datos de vuelo.
-    El resultado de la combinación se realiza utilizando la función merge de pandas y los parámetros de unión
-    ('left_on' y 'right_on') se determinan en función de la frecuencia.
-
-    La función devuelve el DataFrame resultante con los datos combinados y una lista de las variables meteorológicas
-    que se han incluido en la combinación.
+    This function combines flight and weather data based on the specified
+    frequency ('daily' or 'hourly'). Weather data should be contained in the 
+    'dict_weather' dictionary, where the keys are frequencies 
+    ('daily' or 'hourly') and the values are the corresponding DataFrames.
+    
+    For each frequency, different weather variables are selected to combine 
+    with flight data. The combination result is achieved using the pandas 
+    merge function, and the join parameters ('left_on' and 'right_on') 
+    are determined based on the frequency.
+    
+    The function returns the resulting DataFrame with the combined data and 
+    a list of weather variables that have been included in the combination.
     """
     df_weather = weather_dict[freq]
     
@@ -295,7 +380,7 @@ def join_fly_weather(weather_dict, df_fly, freq: str):
     
     if freq == 'daily':   
         totalSunHour = (pd.to_datetime(df_weather['sunset']) -
-                        pd.to_datetime(df_weather['sunrise'])).dt.seconds / 3600
+                        pd.to_datetime(df_weather['sunrise'])).dt.seconds/3600
         df_weather = df_weather.assign(totalSunHour=totalSunHour)
         weather_variables = ['maxtempC', 'mintempC', 'avgtempC', 
                              'sunHour', 'totalSunHour', 'uvIndex']
@@ -322,33 +407,5 @@ def str_to_json(file_path):
     data = json.loads(content_str)
     return data
 
-def _join_weather_data(df_hourly: pd.DataFrame,
-                       df_daily: pd.DataFrame,
-                       df_coordinates: pd.DataFrame):
-    '''
-    Join in one single dataframe the weather data with hourly and daily 
-    frequency, and the localizations geopositions. Hourly and daily dataframes
-    contains not only different frequency but different variables
 
-    Parameters
-    ----------
-    df_hourly : pd.DataFrame
-        weather data with hourly frequency.
-    df_daily : pd.DataFrame
-        weather data with daily frequency.
-    df_coordinates : pd.DataFrame
-        Latitude, longitude and altitude of each localization.
-
-    Returns
-    -------
-    df_complete : pd.DataFrame
-        dataframe with the houly, daily and geoposition information joined.
-
-    '''
-    df_weather = df_hourly.merge(df_daily,
-                                 on = ['date', 'location'])
-    df_complete = df_weather.merge(df_coordinates, 
-                                   left_on = 'location',
-                                   right_index=True)
-    return df_complete
 

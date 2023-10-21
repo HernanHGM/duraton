@@ -224,7 +224,16 @@ class ElevationLoader():
         reduced the unused data is vital to reduce execution time.
         In df_elevation all the data stored in terrain tiles is loaded, 
         but only the terrain information where the bird flies is needed.
-
+        
+        Delta is the increment from one tile terrain to another. 
+        we get it with this code:
+            a = np.sort(np.array(list(set(df_elevation.min_lat))))
+            b = np.diff(a)
+            c = max(b) --> delta > c
+        
+        Is important to assure that the borders of the fly coordinates get
+        their tile terrain information
+        
         Parameters
         ----------
         df_fly : pd.DataFrame
@@ -238,14 +247,15 @@ class ElevationLoader():
             Same df_elevation but filtered
 
         '''
+        delta = 0.0003
         max_lat = max(df_fly.Latitude)
         min_lat = min(df_fly.Latitude)
         max_long = max(df_fly.Longitude)
         min_long= min(df_fly.Longitude)
-        condition = (df_elevation.max_lat <= max_lat) &\
-                    (df_elevation.min_lat >= min_lat) &\
-                    (df_elevation.max_long <= max_long) &\
-                    (df_elevation.min_long >= min_long)
+        condition = (df_elevation.max_lat <= max_lat + delta) &\
+                    (df_elevation.min_lat >= min_lat - delta) &\
+                    (df_elevation.max_long <= max_long + delta) &\
+                    (df_elevation.min_long >= min_long - delta)
         df_elevation = df_elevation.loc[condition]
         return df_elevation
 
@@ -327,7 +337,7 @@ class FlyElevationJoiner():
         
     def _clean(self, df_joined):
         columns = df_joined.columns.to_list()
-        unnamed_cols = [col for col in columns if 'UTC' in col]
+        unnamed_cols = [col for col in columns if 'Unnamed' in col]
         drop_cols = ['ID', 'datatype', 'hdop',
                      'min_long', 'max_long',
                      'min_lat', 'max_lat'] + unnamed_cols
