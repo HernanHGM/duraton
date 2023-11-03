@@ -19,42 +19,28 @@ path = 'E:\\duraton'
 if path not in sys.path:
     sys.path.append(path)
 
-import geolocalizacion.weather as weather
-import geolocalizacion.geolocalizacion as geoloc
-import geolocalizacion.elevation as ele
+import geolocalizacion.data_processing as dp
+from geolocalizacion.elevation import ElevationLoader, FlyElevationJoiner
 from geolocalizacion.flying_discrimination import FlightAnalyzer
 
-# %% GUARDO O CARGO DATOS DE VUELO, ELEVACION Y METEOROLÓGICO
-path_enriquecido = "E:\\duraton\\geolocalizacion\\_data\\Gato_enriquecida.csv"
-df = pd.read_csv(path_enriquecido)
-df['acc'] = np.sqrt(df.acc_x**2 +
-                                df.acc_y**2 +
-                                df.acc_z**2)
 
-df['mag'] = np.sqrt(df.mag_x**2 +
-                                df.mag_y**2 +
-                                df.mag_z**2)
-df['month'] = pd.to_datetime(df['UTC_date'], format="%Y/%m/%d").dt.strftime('%B')
-df['week_number'] = pd.to_datetime(df['UTC_date'], format="%Y/%m/%d")\
-                      .dt.strftime('%W')\
-                      .astype(int)
-df = df[(df.time_step_s>285) & (df.time_step_s<315)]
+# %% CARGO DATOS DE VUELO, ELEVACION Y METEOROLÓGICO
+nombre = 'Gato'
+path_enriquecido = f"E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation_weather\\{nombre}_elevation_weather.csv"
 
-# %% DEFINO VUELO Y POSADO
-plt.close('all')
-Fa = FlightAnalyzer()
-x, freq, n_start, n_end = Fa.get_histogram(df, column='speed_km_h', plot=True)
-params, cov_matrix = Fa.optimize_parameters(x, freq, plot=True)
-uncertain_values = Fa.find_flying_uncertainty(x, freq, params, plot=True)
-df = Fa.define_flying_situation(df, uncertain_values)
-df.boxplot('speed_km_h', by='flying_situation')
-df.groupby('flying_situation').size()
+df = pd.read_csv(path_enriquecido, index_col=False)
+# %% FILTERS
+altitude_condition = (df.bird_altitude>0)
+time_step_condition = (df.time_step_s>285) & (df.time_step_s<315)
+satellite_condition = (df.satcount>4)
+all_conditions = altitude_condition & time_step_condition & satellite_condition 
 
-# %% ANÑALISIS INICIAL DATOS
-# Pinto altitudes en funcion de su situacion de vuelo
-df.boxplot('bird_altitude', by='flying_situation')
-df.boxplot('Altitude_m', by='flying_situation')
-df.boxplot('elevation', by='flying_situation')
+original_registers = len(df)
+df = df[all_conditions]
+final_registers = len(df)
+
+print('Registros antes del filtrado: ', original_registers)
+print('Registros tras del filtrado: ', final_registers)
 
 # %% datos vuelo landeds vs temperatura
 
@@ -88,76 +74,63 @@ def get_flying_metrics_aggregates(df, var_gby, plot=False):
         
         fig, axs = plt.subplots(2,2,figsize=(10,6))
         
-        df_join[flying].plot.scatter(x=var_gby, y='mean_altitude', ax=axs[0,0],
-                                      color='red', label='flying',
-                                      xlabel=xlabel_dict[var_gby],
-                                      ylabel='mean altitude (m)')
-        df_join[landed].plot.scatter(x=var_gby, y='mean_altitude', ax=axs[0,0],
-                                     color='blue', label='landed',
-                                     xlabel=xlabel_dict[var_gby],
-                                     ylabel='mean altitude (m)')
+        yparams_list = [['mean_altitude', axs[0, 0], 'mean altitude (m)'],
+                       ['distance_2D_by_hour', axs[1, 0], 'displacement by hour (km/h)'],
+                       ['flying_time_percentage', axs[0, 1], 'flying time percentage (%)'],
+                       ['bird_speed', axs[1, 1], 'mean instant speed (km/h)']]
+        fly_params_list = [['flying', 'red']
+                           ['landed', 'blue']]
+        for yparams in yparams_list:
+            for fly_params in fly_params_list:
+                condition = (df_join[fly_col]==fly_params[0])
+                df_join[condition].plot.scatter(x=var_gby,
+                                                y=yparams[0], 
+                                                ax=yparams[1], 
+                                                color=fly_params[1], 
+                                                label=fly_params[0],
+                                                xlabel=xlabel_dict[var_gby],
+                                                ylabel=yparams[2])
+                                         
+        # df_join[flying].plot.scatter(x=var_gby, y='mean_altitude', ax=axs[0,0],
+        #                               color='red', label='flying',
+        #                               xlabel=xlabel_dict[var_gby],
+        #                               ylabel='mean altitude (m)')
+        # df_join[landed].plot.scatter(x=var_gby, y='mean_altitude', ax=axs[0,0],
+        #                              color='blue', label='landed',
+        #                              xlabel=xlabel_dict[var_gby],
+        #                              ylabel='mean altitude (m)')
         
-        df_join[flying].plot.scatter(x=var_gby, y='distance_2D_by_hour',
-                                      ax=axs[1,0], color='red', label='flying',
-                                      xlabel=xlabel_dict[var_gby],
-                                      ylabel='displacement by hour (km/h)')
-        df_join[landed].plot.scatter(x=var_gby, y='distance_2D_by_hour',
-                                     ax=axs[1,0], color='blue', label='landed',
-                                     xlabel=xlabel_dict[var_gby],
-                                     ylabel='displacement by hour (km/h)')
+        # df_join[flying].plot.scatter(x=var_gby, y='distance_2D_by_hour',
+        #                               ax=axs[1,0], color='red', label='flying',
+        #                               xlabel=xlabel_dict[var_gby],
+        #                               ylabel='displacement by hour (km/h)')
+        # df_join[landed].plot.scatter(x=var_gby, y='distance_2D_by_hour',
+        #                              ax=axs[1,0], color='blue', label='landed',
+        #                              xlabel=xlabel_dict[var_gby],
+        #                              ylabel='displacement by hour (km/h)')
         
-        df_join[flying].plot.scatter(x=var_gby, y='flying_time_percentage', ax=axs[0,1],
-                                     color='red', label='flying',
-                                     xlabel=xlabel_dict[var_gby],
-                                     ylabel='flying time percentage (%)' )
-        df_join[landed].plot.scatter(x=var_gby, y='flying_time_percentage', ax=axs[0,1],
-                                     color='blue', label='landed',
-                                     xlabel=xlabel_dict[var_gby],
-                                     ylabel='flying time percentage (%)')
+        # df_join[flying].plot.scatter(x=var_gby, y='flying_time_percentage', ax=axs[0,1],
+        #                              color='red', label='flying',
+        #                              xlabel=xlabel_dict[var_gby],
+        #                              ylabel='flying time percentage (%)' )
+        # df_join[landed].plot.scatter(x=var_gby, y='flying_time_percentage', ax=axs[0,1],
+        #                              color='blue', label='landed',
+        #                              xlabel=xlabel_dict[var_gby],
+        #                              ylabel='flying time percentage (%)')
         
-        df_join[flying].plot.scatter(x=var_gby, y='bird_speed', ax=axs[1,1],
-                                      color='red', label='flying',
-                                      xlabel=xlabel_dict[var_gby],
-                                      ylabel='mean instant speed (km/h)')
-        df_join[landed].plot.scatter(x=var_gby, y='bird_speed', ax=axs[1,1],
-                                     color='blue', label='flying',
-                                     xlabel=xlabel_dict[var_gby],
-                                     ylabel='mean instant speed (km/h)')
-        specie = df.especie.unique()[0]
-        name = df.nombre.unique()[0]
+        # df_join[flying].plot.scatter(x=var_gby, y='bird_speed', ax=axs[1,1],
+        #                               color='red', label='flying',
+        #                               xlabel=xlabel_dict[var_gby],
+        #                               ylabel='mean instant speed (km/h)')
+        # df_join[landed].plot.scatter(x=var_gby, y='bird_speed', ax=axs[1,1],
+        #                              color='blue', label='flying',
+        #                              xlabel=xlabel_dict[var_gby],
+        #                              ylabel='mean instant speed (km/h)')
+        specie = df.specie.unique()[0]
+        name = df.name.unique()[0]
         fig.suptitle(f'Especie:{specie}, Nombre:{name}')
         fig.tight_layout()
-        # im = df_join.plot.scatter(x=var_gby, y='total_distance_2D', c=fly_col,
-        #                       cmap='viridis', ax = axs[1,0])
-        # im = df_join.plot.scatter(x=var_gby, y='flying_time', c=fly_col,
-        #                       cmap='viridis', ax = axs[0,1])
-        # im = df_join.plot.scatter(x=var_gby, y='flying_time_ratio', c=fly_col,
-        #                       cmap='viridis', ax = axs[1,1])
-        # im = df_join.plot.scatter(x=var_gby, y='bird_speed', c=fly_col,
-        #                       cmap='viridis', ax = axs[2,1])
-
-        
-        # fig2, axs2 = plt.subplots(3,2,figsize=(15,6))
-        # im = df_join.plot.scatter(x=var_gby, y='mean_altitude', 
-        #                           s='n_samples', c=fly_col, 
-        #                       cmap='viridis', ax = axs2[0,0])
-        # im = df_join.plot.scatter(x=var_gby, y='total_distance_2D', 
-        #                           s='n_samples', c=fly_col,
-        #                       cmap='viridis', ax = axs2[1,0])
-        # im = df_join.plot.scatter(x=var_gby, y='mean_distance_2D', 
-        #                           s='n_samples', c=fly_col,
-        #                       cmap='viridis', ax = axs2[2,0])
-        # im = df_join.plot.scatter(x=var_gby, y='flying_time', 
-        #                           s='n_samples', c=fly_col,
-        #                       cmap='viridis', ax = axs2[0,1])
-        # im = df_join.plot.scatter(x=var_gby, y='flying_time_ratio', 
-        #                           s='n_samples', c=fly_col,
-        #                       cmap='viridis', ax = axs2[1,1])
-        # im = df_join.plot.scatter(x=var_gby, y='bird_speed', 
-        #                           s='n_samples', c=fly_col,
-        #                       cmap='viridis', ax = axs2[2,1])
-
-        
+       
     return df_join
 
 

@@ -5,11 +5,8 @@ Created on Thu Jan  5 12:50:28 2023
 """
 import geopandas as gpd
 import pandas as pd
-import numpy as np
 from shapely.geometry import MultiPolygon, Polygon, Point
-import os
 
-from datetime import timedelta
 import matplotlib.pyplot as plt
 import seaborn as sns
 import folium
@@ -18,144 +15,7 @@ from folium.plugins import MarkerCluster, HeatMap
 import webbrowser
 
 from math import pi
-# =============================================================================
-# IMPORTACION DATOS
-# =============================================================================
-def find_csv_filenames(path_to_dir, suffix=".csv"):
-    filenames = os.listdir(path_to_dir)
-    return [filename for filename in filenames if filename.endswith(suffix)]
 
-def extract_info(nombre_archivo):
-    nombre_limpio = nombre_archivo.replace('.csv', '')
-    partes = nombre_limpio.split('_')
-    
-    conversor_especie={'Aquada': 'Águila imperial',
-                        'Aquchr': 'Águila real',
-                        'Aqufas': 'Águila perdicera'}
-    
-    especie = conversor_especie[partes[0]]
-    ID = int(partes[1])
-    nombre = partes[2]
-    return especie, ID, nombre
-
-def load_data(path, filenames, reindex_data = True):
-    # join root_path and filenames into full path
-    full_filenames = (path + '\\' + name for name in filenames) 
-    
-    li = []
-    date_columns = ['UTC_datetime', 'UTC_date', 'UTC_time']
-    for name in full_filenames:
-        print(name)
-        df = pd.read_csv(name, parse_dates = date_columns)
-        df.rename(columns={'device_id': 'ID'}, inplace=True)
-        df = remove_outliers(df, columns=['Latitude', 'Longitude'])
-        if reindex_data == True:
-            df = reindex_interpolate(df, freq = 5)
-        li.append(df)
-    
-    df = pd.concat(li, axis=0, ignore_index=True)
-    return df
-# =============================================================================
-# LIMPIEZA
-# =============================================================================
-def remove_outliers(data, columns = None):
-
-    data_o = data.copy()
-    if columns != None:
-        data = data[columns]
-        
-    lim_df = data.quantile((0.05, 0.95)).transpose()
-    lim_df['IQR'] = lim_df[0.95] - lim_df[0.05]
-    lim_df['Upper'] = lim_df[0.95] + lim_df['IQR']
-    lim_df['Lower'] = lim_df[0.05] - lim_df['IQR']
-    lim_df = lim_df.transpose()
-    
-    up_condition = (data <= lim_df.loc['Upper',:])
-    low_condition = (data >= lim_df.loc['Lower',:])
-    condition = up_condition & low_condition
-    
-    data_clean = data_o[condition.all(axis=1)]
-    
-    return data_clean
-
-
-def equal_index(df, freq = 5):
-    freq_str = str(freq) + 'min'
-    df_ = df.set_index('UTC_datetime')
-    start_date = df_.index.min()
-    rounded_date = start_date - timedelta(minutes=start_date.minute%freq, 
-                                          seconds=start_date.second)
-    
-    df_reindexed = df_.reindex(pd.date_range(start = rounded_date,
-                                             end = df_.index.max(),
-                                             freq = freq_str))
-
-    df_full = pd.concat([df_, df_reindexed], axis = 0)  
-    df_full.sort_index(axis = 0, inplace =True)
-    df_full.reset_index(inplace = True)
-    df_full.rename(columns = {'index': 'UTC_datetime'}, inplace =True)
-    df_full.drop_duplicates(inplace=True)
-    return df_full
-
- 
-def remove_nulls(df, freq = 5):
-    # Get rows where too much columns are null
-    threshold = int(60/freq)
-    n_nulls = df['ID'].isna().rolling(threshold, center=False).sum()
-    # shift -threshold + 2 pq threshold solo borraria el último valor con dato
-    # +1 para salvar la última fecha con dato
-    # +2 para salvar la última fecha generada (valor nulo)
-    forward_condition = (n_nulls.shift(-threshold+2) != threshold)
-    # +1 para salvar la ultima fecha sin dato
-    backward_condition = (n_nulls.shift(1) != threshold)
-    condition1 = forward_condition & backward_condition
-    
-    # Get rows of the new indexes
-    c1 = df.UTC_datetime.dt.minute%freq == 0 # Multiplos de 5
-    c2 = df.UTC_datetime.dt.second == 0 # Segundos = 0
-    condition2 = c1 & c2
-
-    condition = condition1 & condition2
-    return condition
-
-def interpolate_clean(df, condition):
-    # Same datetim column
-    dates = df.UTC_datetime
-    dates = dates[condition]
-    # Drop datime columns
-    df_ = df.drop(labels = ['UTC_datetime', 'UTC_date', 'UTC_time'], axis = 1)
-
-    df_ = df_.interpolate(method ='linear', limit_direction ='forward')
-    df_ = df_[condition]
-    df_['UTC_datetime'] = dates
-    df_['UTC_date'] = dates.dt.date
-    df_['UTC_time'] = dates.dt.time
-        
-    return df_
-
-def reindex_interpolate(df, freq = 5):
-    df2 = equal_index(df) 
-    condition = remove_nulls(df2, freq)
-    df3 = interpolate_clean(df2, condition)
-    
-    return df3
-
-def get_same_data(df, lista_nombres):
-    
-    df2 = df[df['nombre'].isin(lista_nombres)]
-    dg = pd.DataFrame(df2.groupby('UTC_datetime')['nombre'].nunique())
-    dg.rename(columns={'nombre': 'n_data'}, inplace = True)
-    dg.reset_index(inplace =True)
-    df2 = df2.merge(dg, on='UTC_datetime', how = 'left')
-    df3 = df2[df2['n_data']==len(lista_nombres)]
-    
-    return df3
-
-
-
-# =============================================================================
-# CÁLCULOS
-# =============================================================================
 def circular_area(data, r_plane):
     
     if isinstance(data, list) == True:
@@ -178,28 +38,7 @@ def circular_area(data, r_plane):
     buffered_points['name'] = names   
     return buffered_points
 
-def deg_km(v):
-    dif = abs(v)
-    min_dif = np.minimum(dif, 360-dif)
-    rad_dif = 2*np.pi*min_dif/360
-    km_dif = 6370*rad_dif
-    return km_dif  
 
-def calculate_distance(df1, df2):
-    lat_arr = df1.Latitude - df2.Latitude
-    d_lat = deg_km(lat_arr)
-    
-    long_arr = df1.Longitude - df2.Longitude
-    d_long = deg_km(long_arr)
-    
-    d_alt = (df1.Altitude_m - df2.Altitude_m)/1000
-    
-    distancias = pd.DataFrame()
-    distancias['3D'] = np.sqrt(d_lat**2 + d_long**2 + d_alt**2)
-    distancias['2D'] = np.sqrt(d_lat**2 + d_long**2) 
-    distancias['altura'] = d_alt
-    
-    return distancias
 # =============================================================================
 # SNS KERNELS
 # =============================================================================
@@ -408,7 +247,7 @@ def add_animated_points (df, m, df_kernels = None):
         duration="PT10M",
     ).add_to(m)
 
-def plot_map(m):
-    file_map = "E:\\trabajo_pajaros\\geolocalización\\map.html"
+def plot_map(m: folium.Map, 
+             file_map: str="E:\\duraton\\geolocalizacion\\_tests\\map.html"):
     m.save(file_map)
     webbrowser.open(file_map)
