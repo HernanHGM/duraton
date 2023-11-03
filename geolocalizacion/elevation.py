@@ -338,7 +338,7 @@ class FlyElevationJoiner():
     def _clean(self, df_joined):
         columns = df_joined.columns.to_list()
         unnamed_cols = [col for col in columns if 'Unnamed' in col]
-        drop_cols = ['ID', 'datatype', 'hdop',
+        drop_cols = ['datatype', 'hdop',
                      'min_long', 'max_long',
                      'min_lat', 'max_lat'] + unnamed_cols
         df_joined = df_joined.drop(labels=drop_cols, axis=1)

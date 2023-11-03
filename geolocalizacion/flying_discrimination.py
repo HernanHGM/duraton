@@ -6,6 +6,11 @@ from functools import partial
 from scipy.optimize import curve_fit
 from scipy.stats import betabinom
 
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import accuracy_score, cohen_kappa_score
+from sklearn.preprocessing import MinMaxScaler
+
 from geolocalizacion import utils
 # =============================================================================
 # FLY ANALYSIS
@@ -16,13 +21,14 @@ from geolocalizacion import utils
 
 class FlightAnalyzer:
     '''
-    Clase que contiene las funciones necesarias para calcular cuando 
-    un pájaro está en vuelo o posado
+    Class that contains the necessary functions to calculate whether a bird
+    is flying or landed.
     
-    get_histogram: calcula las frecuencias del histograma para tantos bins
-    como valores enteros tiene la variable a calcular. 
-    
-    fit_function: Ajusta 
+    get_histogram: Calculates the histogram frequencies for as many bins
+    as there are integer values in the variable to be calculated.
+
+    fit_function: Fits and
+
     
     '''
     
@@ -32,10 +38,13 @@ class FlightAnalyzer:
 
     def get_histogram(self, column='speed_km_h', plot=False):
         '''
-        Recibe un dataframe y extrae la columna indicada, por defecto se calcula la velocidad
-        Devuelve los valores del eje x, su primer y ultimo valor y las frequencias
+        It receives a DataFrame and extracts the specified column; 
+        by default, it calculates the speed. 
+        It returns the values on the x-axis, their first and last values,
+        and the frequencies.
+        It can plot the histogram of the values
         '''
-        data = np.array(self.df[column])
+        data = np.round(np.array(self.df[column])).astype(int)
         n_start = min(data)
         n_end = max(data)
         n_bins = int(n_end - n_start)
@@ -53,25 +62,6 @@ class FlightAnalyzer:
             
     
         return x[n_start:n_end], freq[n_start:n_end], n_start, n_end
-
-
-    def fit_betabinom(self, x, C1, a1, b1, C2, a2, b2, n):
-        '''
-        Sum of two betabinomial function
-        x: value in the axis x
-        C1: normalizing constant for the first distribution
-        a1: alfa value for the first betabinomial distribution
-        b1: beta value for the first betabinomial distribution
-        C2: normalizing constant for the second distribution
-        a2: alfa value for the second betabinomial distribution
-        b2: beta value for the second betabinomial distribution
-        n: number of values that has the array to fit
-        '''
-        p1 = C1*betabinom.pmf(x, n, a1, b1)
-        p2 = C2*betabinom.pmf(x, n, a2, b2)
-        return p1+p2
-    
-    
     
     def optimize_parameters(self, 
                             x, freq, p0=[0.80, 1.5, 1000, 0.2, 5, 15],
@@ -104,7 +94,7 @@ class FlightAnalyzer:
 
         '''
         n = len(freq)
-        fit_function_partial = partial(self.fit_betabinom, n=n)
+        fit_function_partial = partial(self._fit_betabinom, n=n)
         fit_coefs, cov_matrix = curve_fit(fit_function_partial, x, freq, p0=p0)
         
         if plot==True:
@@ -112,7 +102,7 @@ class FlightAnalyzer:
             ax.plot(x, freq, label='True data')
     
             ax.plot(x,
-                     self.fit_betabinom(x, *fit_coefs, n=len(freq)),
+                     self._fit_betabinom(x, *fit_coefs, n=len(freq)),
                      marker='o', linestyle='',
                      label='Fit result')
             ax.set_xlabel('Bird speed (km/h)')
@@ -123,31 +113,22 @@ class FlightAnalyzer:
             
         return fit_coefs, cov_matrix
     
-    def betabinomial(self, x, C1, a1, b1):
+    def _fit_betabinom(self, x, C1, a1, b1, C2, a2, b2, n):
         '''
-        beta binomial function
-
-        Parameters
-        ----------
-        x : np.array
-            x axis.
-        C1 : float
-            normalizacion constant.
-        a1 : float
-            alfa constant binomial distribution.
-        b1 : float
-            beta alfa constant binomial distribution.
-
-        Returns
-        -------
-        p1 : np.array
-            probability distribution along x array.
-
+        Sum of two betabinomial function
+        x: value in the axis x
+        C1: normalizing constant for the first distribution
+        a1: alfa value for the first betabinomial distribution
+        b1: beta value for the first betabinomial distribution
+        C2: normalizing constant for the second distribution
+        a2: alfa value for the second betabinomial distribution
+        b2: beta value for the second betabinomial distribution
+        n: number of values that has the array to fit
         '''
-        n = len(x)
         p1 = C1*betabinom.pmf(x, n, a1, b1)
-        return p1
-    
+        p2 = C2*betabinom.pmf(x, n, a2, b2)
+        return p1+p2
+        
     def find_flying_uncertainty(self, 
                                  x, freq, fit_coefs, 
                                  threshold=0.4, 
@@ -207,8 +188,8 @@ class FlightAnalyzer:
         # Evitamos esta cola final porque el error de ajuste aumenta, 
         # pero no hay duda de que son datos de vuelo y no posados
         limit_uncertainty = np.argmax(freq_cum>0.9)
-        y1 = self.betabinomial(x, *fit_coefs[:3])
-        y2 = self.betabinomial(x, *fit_coefs[3:])
+        y1 = self._betabinomial(x, *fit_coefs[:3])
+        y2 = self._betabinomial(x, *fit_coefs[3:])
         y3 = 2*abs(freq-(y1+y2))/(y1+y2+freq) #Diferencia/media multiplico *2 debido a la media
         
         uncertain_values = utils.conditional_selection(y3[:limit_uncertainty], threshold, n, operation)
@@ -232,6 +213,31 @@ class FlightAnalyzer:
             plt.legend()
             
         return uncertain_values  
+    
+    def _betabinomial(self, x, C1, a1, b1):
+        '''
+        beta binomial function
+
+        Parameters
+        ----------
+        x : np.array
+            x axis.
+        C1 : float
+            normalizacion constant.
+        a1 : float
+            alfa constant binomial distribution.
+        b1 : float
+            beta alfa constant binomial distribution.
+
+        Returns
+        -------
+        p1 : np.array
+            probability distribution along x array.
+
+        '''
+        n = len(x)
+        p1 = C1*betabinom.pmf(x, n, a1, b1)
+        return p1
     
 
     def define_flying_situation(self, 
@@ -299,3 +305,248 @@ class FlightAnalyzer:
         elif row['flying_situation'] == 'flying':
             return 1
 
+
+
+
+class UndefinedFlyClassifier:
+    """
+    Create ML model to classify the undefined flying situations
+    The model is trained with the previously flying situations defined
+    Using the variable acc and acc_y the undefined values are classified with 
+    a accuray>0.95 & cohen kappa score > 0.9
+    """
+    
+    def __init__(self):
+        pass
+    
+    
+    def train_model(self,
+                    df: pd.DataFrame,
+                    scaler=MinMaxScaler(),
+                    classifier=KNeighborsClassifier(n_neighbors=10)):
+        """
+        Train a classifier model and predict 'undefined' flying situations.
+    
+        Parameters:
+        -----------
+        df : pandas.DataFrame
+            DataFrame containing the data for training and prediction.
+    
+        scaler : Scaler object, optional
+            A data scaler to normalize the feature data.
+            Defaults to MinMaxScaler().
+    
+        classifier : Classifier object, optional
+            A classifier to fit and predict the model. 
+            Defaults to KNeighborsClassifier(n_neighbors=10).
+    
+        Returns:
+        --------
+        pandas.DataFrame
+            DataFrame with updated 'flying_situation' values, 
+            replacing 'undefined' with predicted labels.
+    
+        Notes:
+        ------
+        This function trains a classifier model to predict 'undefined' 
+        flying situations based on the provided data.
+        The data is divided into a training set with 'flying' and 'landed' 
+        situations and an undefined set whose flying situation is going to
+        be predicted. 
+        Prior to training and prediction, the model accuracy is check withe the 
+        training data in the function: _check_model_accuracy
+        Feature scaling is applied to both sets using the provided scaler. 
+        The classifier is then trained on the training set and used to predict 
+        the labels for the 'undefined' set.
+        Predicted labels are assigned to the original DataFrame 'df',
+        replacing the 'undefined' labels.
+        The function returns the updated DataFrame with predicted flying situations.
+        """
+        self._check_model_accuracy(df, scaler, classifier)
+    
+        train_df = df[df['flying_situation'].isin(['flying', 'landed'])]
+        undefined_df = df[df['flying_situation'] == 'undefined']
+    
+        X_train = train_df[['acc', 'acc_y']]
+        Y_train = train_df['flying_situation']
+    
+        X_undefined = undefined_df[['acc', 'acc_y']]
+    
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_undefined_scaled = scaler.transform(X_undefined)
+    
+        classifier.fit(X_train_scaled, Y_train)
+    
+        predicted_labels = classifier.predict(X_undefined_scaled)
+        df.loc[df['flying_situation'] == 'undefined', 'flying_situation'] = predicted_labels
+        return df
+    
+   
+    def _check_model_accuracy(self,
+                              df : pd.DataFrame, 
+                              scaler=MinMaxScaler(),
+                              classifier=KNeighborsClassifier(n_neighbors = 10)):
+        """
+        Check the accuracy of a classifier model using a stratified K-fold cross-validation.
+    
+        Parameters:
+        -----------
+        df : pandas.DataFrame
+            DataFrame containing the data for evaluation.
+    
+        scaler : Scaler object, optional
+            A data scaler to normalize the feature data.
+            Defaults to MinMaxScaler().
+    
+        classifier : Classifier object, optional
+            A classifier to fit and predict the model. 
+            Defaults to KNeighborsClassifier(n_neighbors=10).
+    
+        Returns:
+        --------
+        None
+    
+        Notes:
+        ------
+        The data is filtered to include only the 'flying' and 'landed' flying 
+        situations, and then it is divided into features (X) and labels (Y).
+        The function calculates and prints the average accuracy and kappa scores 
+        based on the cross-validation results.
+    
+        The function does not return any values; it prints the results to the console.
+        """
+        filtered_df = df[df['flying_situation'].isin(['flying', 'landed'])]
+    
+        X = filtered_df[['acc', 'acc_y']]
+        Y = filtered_df['flying_situation']
+        
+        kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    
+        results = [self._evaluate_single_split(split, X, Y, scaler, classifier)\
+                   for split in kf.split(X, Y)]
+        accuracy = [result[0] for result in results]
+        kappa = [result[1] for result in results]
+        print(f'Classifier accuracy: {np.mean(accuracy):.2f} \
+                kappa: {np.mean(kappa):.2f}')
+    
+    def _evaluate_single_split(self,
+                               split : tuple,
+                               X : pd.DataFrame,
+                               Y : pd.Series, 
+                               scaler=MinMaxScaler(),
+                               classifier=KNeighborsClassifier(n_neighbors=10)):
+        """
+        Evaluate a single split of training and testing data.
+        
+        Parameters:
+        -----------
+        split : tuple
+            A tuple containing training and testing indices.
+    
+        X : pandas.DataFrame
+            Feature data.
+    
+        Y : pandas.Series
+            Target data.
+    
+        scaler : Scaler object
+            A data scaler to transform the feature data.
+    
+        classifier : Classifier object
+            A classifier to fit and predict the model.
+    
+        Returns:
+        --------
+        accuracy : float
+        kappa : float
+            Accuracy and kappa scores of the classifier.
+        """
+        X_train, X_test, Y_train, Y_test = self._select_split_data(split, X, Y)
+        kappa, accuracy = self._evaluate_classifier(X_train, X_test, 
+                                              Y_train, Y_test, 
+                                              scaler, classifier)
+        return kappa, accuracy
+    
+    def _evaluate_classifier(self,
+                             X_train : pd.DataFrame,
+                             X_test : pd.DataFrame,
+                             Y_train : pd.DataFrame,
+                             Y_test : pd.DataFrame, 
+                             scaler = MinMaxScaler(),
+                             classifier = KNeighborsClassifier(n_neighbors = 10)):
+        """
+        Evaluate a classifier using scaled training and testing data.
+        
+        Parameters:
+        -----------
+        X_train : pandas.DataFrame
+            Training feature data.
+    
+        X_test : pandas.DataFrame
+            Testing feature data.
+    
+        Y_train : pandas.Series
+            Training target data.
+    
+        Y_test : pandas.Series
+            Testing target data.
+    
+        scaler : Scaler object
+            A data scaler to transform the feature data.
+    
+        classifier : Classifier object
+            A classifier to fit and predict the model.
+    
+        Returns:
+        --------
+        accuracy : float
+        kappa : float
+            Accuracy and kappa scores of the classifier.
+        """
+    
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
+        
+        classifier.fit(X_train_scaled, Y_train)
+        Y_pred = classifier.predict(X_test_scaled)
+        
+        accuracy = accuracy_score(Y_test, Y_pred)
+        kappa = cohen_kappa_score(Y_test, Y_pred)
+        
+        return accuracy, kappa
+    
+    def _select_split_data(self, 
+                           split : tuple,
+                           X : pd.DataFrame,
+                           Y : pd.Series):
+        """
+        Select data for a specific split defined by indices.
+        
+        Parameters:
+        -----------
+        split : tuple
+            A tuple containing training and testing indices.
+    
+        X : pandas.DataFrame
+            Feature data.
+    
+        Y : pandas.Series
+            Target data.
+    
+        Returns:
+        --------
+        X_train : pandas.DataFrame
+        X_test : pandas.DataFrame
+        Y_train : pandas.Series
+        Y_test : pandas.Series
+            Training and testing feature data and target data.
+        """
+        train_index, test_index = split
+        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+        Y_train, Y_test = Y.iloc[train_index], Y.iloc[test_index]
+        
+        return X_train, X_test, Y_train, Y_test
+    
+
+        
+    

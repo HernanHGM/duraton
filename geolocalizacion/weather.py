@@ -291,14 +291,14 @@ def get_closest_weather(df_fly: pd.DataFrame,
 
     '''
     
-    df_fly['closest_location'] = df_fly.apply(_find_nearest_location, 
+    df_fly['closest_location'] = df_fly.apply(find_nearest_location, 
                                               args=(weather_dict['coordinates'],), 
                                               axis=1)
     df_fly, _ = _join_fly_weather(weather_dict, df_fly, freq='hourly')
     df_fly, _ = _join_fly_weather(weather_dict, df_fly, freq='daily')
     return df_fly
 
-def _find_nearest_location(row: pd.Series, 
+def find_nearest_location(row: pd.Series, 
                            locations_df: pd.DataFrame):
     '''
     Given a row of a dataframe containing a Latitude and Longitude column

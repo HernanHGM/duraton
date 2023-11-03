@@ -62,15 +62,16 @@ def load_data(path: str,
                          index_col=False,
                          encoding="ISO-8859-1")
         df = _clean_unnamed(df)
+        print('N registers: ', df.shape[0])
         if pre_process == True:
             df.rename(columns={'device_id': 'ID'}, inplace=True)
             df = _remove_outliers(df, columns=['Latitude', 'Longitude'])
             df = df.loc[df.Altitude_m > 0]
         if reindex_data == True:
-            df = _reindex_interpolate(df, freq = freq)
+            df = reindex_interpolate(df, freq = freq)
             print(freq)
         if pre_process == True:
-            df = _enriquecer(df, filenames)
+            df = enriquecer(df, filenames)
         li.append(df)
     
     df = pd.concat(li, axis=0, ignore_index=True)
@@ -82,7 +83,8 @@ def _clean_unnamed(df):
     df = df.drop(labels=unnamed_cols, axis=1)
     return df
 
-def _enriquecer(df, filenames):
+def enriquecer(df : pd.DataFrame, 
+                filenames: List[str]):
     # Añadimos la columna de hora
     df = df.assign(hour=df.UTC_datetime.dt.strftime('%H'))
     df['hour']= pd.to_datetime(df['hour'], format='%H').dt.time.astype(str)
@@ -94,6 +96,8 @@ def _enriquecer(df, filenames):
                          .dt.strftime('%m')
     df['week_number'] = pd.to_datetime(df['UTC_date'], format="%Y/%m/%d")\
                           .dt.strftime('%W')
+                          
+    df['breeding_period'] = df['UTC_datetime'].apply(_categorize_breeding_period)
                           
     # corremos una posicion los datos de posicion
     df['Latitude_lag'] = df['Latitude'].shift(-1)
@@ -114,6 +118,29 @@ def _enriquecer(df, filenames):
     df = df.merge(info_pajaros, how = 'left', on = 'ID')
 
     return df
+
+def _categorize_breeding_period(row : pd.Series):
+    '''
+    March, april, may, june and july compose the breeding period
+    The rest of months are no breeding perior
+
+    Parameters
+    ----------
+    row : pd.Series
+        UTC_datetime column that contains the month of the data.
+
+    Returns
+    -------
+    period_value : str
+        breeding or no breeding period.
+
+    '''
+    if 3 <= row.month <= 7:  # Months from March to July
+        period_value = 'breeding'
+    else:
+        period_value = 'no breeding'
+    return period_value
+
 
 def extract_info(nombre_archivo):
     nombre_limpio = nombre_archivo.replace('.csv', '')
@@ -150,10 +177,20 @@ def _remove_outliers(data, columns = None):
     
     return data_clean
 
+# =============================================================================
+# INTERPOLATE
+# =============================================================================
+def reindex_interpolate(df : pd.DataFrame, 
+                        freq : int=5):
+    df2 = _equal_index(df, freq) 
+    condition = _remove_nulls(df2, freq)
+    df3 = _interpolate_clean(df2, condition)
+    
+    return df3
 
-def equal_index(df, freq = 5):
+def _equal_index(df : pd.DataFrame, 
+                 freq : int=5):
     freq_str = str(freq) + 'min'
-    print(freq_str)
     df_ = df.set_index('UTC_datetime')
     start_date = df_.index.min()
     rounded_date = start_date - timedelta(minutes=start_date.minute%freq, 
@@ -171,7 +208,7 @@ def equal_index(df, freq = 5):
     return df_full
 
  
-def remove_nulls(df, freq = 5):
+def _remove_nulls(df, freq = 5):
     # Get rows where too much columns are null
     threshold = int(60/freq)
     n_nulls = df['ID'].isna().rolling(threshold, center=False).sum()
@@ -191,7 +228,7 @@ def remove_nulls(df, freq = 5):
     condition = condition1 & condition2
     return condition
 
-def interpolate_clean(df, condition):
+def _interpolate_clean(df, condition):
     # Same datetime column
     dates = df.UTC_datetime
     dates = dates[condition]
@@ -206,18 +243,13 @@ def interpolate_clean(df, condition):
         
     return df_
 
-def _reindex_interpolate(df, freq = 5):
-    df2 = equal_index(df, freq) 
-    condition = remove_nulls(df2, freq)
-    df3 = interpolate_clean(df2, condition)
-    
-    return df3
+
 
 def get_same_data(df, lista_nombres):
     
-    df2 = df[df['nombre'].isin(lista_nombres)]
-    dg = pd.DataFrame(df2.groupby('UTC_datetime')['nombre'].nunique())
-    dg.rename(columns={'nombre': 'n_data'}, inplace = True)
+    df2 = df[df['name'].isin(lista_nombres)]
+    dg = pd.DataFrame(df2.groupby('UTC_datetime')['name'].nunique())
+    dg.rename(columns={'name': 'n_data'}, inplace = True)
     dg.reset_index(inplace =True)
     df2 = df2.merge(dg, on='UTC_datetime', how = 'left')
     df3 = df2[df2['n_data']==len(lista_nombres)]
