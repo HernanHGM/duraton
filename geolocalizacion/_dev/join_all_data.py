@@ -25,9 +25,26 @@ filenames = dp.find_csv_filenames(path)
 filenames = [item for item in filenames if 'all' not in item]
 df = dp.load_data(path, filenames, reindex_data=False, pre_process=False)
 
-# %% FILTER
+# %% ANALIZE
 
-df_end = df.copy()
+'''
+En 2023 hay muchos datos tomados en intervalos de 1 segundo, esta situación 
+solo se da en 2023 y por tanto en los individuos que tienen datos de ese año
+Si se aplican los filtros posteriores sin tener en cuenta este efecto, la 
+pérdida de datos es superior al 60%
+sin embargo, si primero desechamos estos datos por no aportar valor, quedándonos
+con aquellos datos con intervalo>10s y luego aplicamos los filtros, vemos que
+la reducción es <25%
+'''
+df.boxplot('time_step_s',by='name')
+
+df[(df.time_step_s>10) & (df.time_step_s<1010)].hist('time_step_s', by='name', bins=100)
+a = df[(df.name=='Navilla') & (df.UTC_date=='2023-08-04')]
+# %% FILTER
+df_pre = df.copy()
+df_pre = df_pre[(df_pre.time_step_s>10)]
+
+df_end = df_pre.copy()
 
 # Todos los valores entre 0 y -10 m de altura se considerarán = 0
 df_end['bird_altitude'] = df_end['bird_altitude'].apply(lambda x: 0 if -10 <= x <= 0 else x)
@@ -39,14 +56,13 @@ all_conditions = altitude_condition & time_step_condition & satellite_condition
 df_end = df_end[all_conditions]
 
 # %% FILTER ANALYSIS
-original_registers = len(df)
+original_registers = len(df_pre)
 final_registers = len(df_end)
 
 print('Registros antes del filtrado: ', original_registers)
 print('Registros tras del filtrado: ', final_registers)
 porcentaje_desecho = round(100*(original_registers-final_registers)/original_registers, 2)
 print(f'Se han desechado un {porcentaje_desecho}% de los datos iniciales')
-
 
 # %% SAVE ALL FILES UNIFIED
 path_all= '\\'.join([path, 'all_data.csv'])

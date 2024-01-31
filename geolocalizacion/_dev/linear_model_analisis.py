@@ -23,7 +23,7 @@ cm = df.corr(numeric_only = True)
 # %%
 x = df[['tempC', 'windspeedKmph', 'sunHour',
         'pressure', 'precipMM', 'humidity']]
-y = df['flying_time_percentage']
+y = df['bird_altitude']
  
 # with sklearn
 regr = linear_model.LinearRegression()

@@ -15,11 +15,13 @@ from geolocalizacion.elevation import ElevationLoader, FlyElevationJoiner
 from geolocalizacion.flying_discrimination import FlightAnalyzer, UndefinedFlyClassifier
 
 # %% DEFINE PATHS
+# path = "E:\\duraton\\geolocalizacion\\_data\\fly\\raw"
+
 path = "E:\\duraton\\geolocalizacion\\_data\\fly\\raw"
 filenames = dp.find_csv_filenames(path)
 nombre = 'Navilla'
 filenames = [item for item in filenames if nombre in item]
-
+# # 
 # %% IMPORT BIRDS DATA
 df_fly = dp.load_data(path, filenames, reindex_data=False)
 '''
@@ -34,7 +36,7 @@ zorita = 201254
 # %% CALCULATE FLYING POSITIONS
 plt.close('all')
 Fa = FlightAnalyzer(df_fly)
-x, freq, n_start, n_end = Fa.get_histogram(column='speed_km_h')
+x, freq, n_start, n_end = Fa.get_histogram(column='speed_km_h') # ground-speed
 params, cov_matrix = Fa.optimize_parameters(x, freq, plot=True)
 uncertain_values = Fa.find_flying_uncertainty(x, freq, params, plot=True)
 df_fly = Fa.define_flying_situation(uncertain_values)
@@ -55,16 +57,17 @@ path_elevation = f"E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevati
 
 df_fly_elevation.to_csv(path_elevation, index=False, encoding="ISO-8859-1")
 # %% READ FLY & ELEVATION DATA
+path_elevation = f"E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation\\{nombre}_elevation.csv"
 df_fly_elevation = pd.read_csv(path_elevation,
                                index_col=False, 
                                encoding="ISO-8859-1")
-
 # %% IMPORT WEATHER DATA
 weather_dict = weather.load_weather_dataframe()
 
 # %% JOIN FLY & WEATHER DATA
 df_fly_elevation_weather = weather.get_closest_weather(df_fly_elevation, 
                                                        weather_dict)
+
 
 # %% SAVE FLY & ELEVATION & WEATHER DATA
 path_elevation_weather = f"E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation_weather\\{nombre}_elevation_weather.csv"

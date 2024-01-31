@@ -64,8 +64,8 @@ app = Flask(__name__)
 @app.route('/api/get_weather')
 def get_weather(location: str,
                 start_date: str='2020-01-01',
-                end_date: str='2023-01-01'):
-    key = 'c5183e6cb96f4b8190a103026230309'
+                end_date: str='2024-01-21'):
+    key = '7f25287f250b4232a5984037242901'    
     time_period = '1'
     location_format = location.replace(' ', '%20') + ',%20Spain'
     url = f'http://api.worldweatheronline.com/premium/v1/past-weather.ashx?key={key}&q={location_format}&format=json&date={start_date}&enddate={end_date}&tp={time_period}'
@@ -118,7 +118,7 @@ def _get_new_date(data):
 # =============================================================================
 # LOAD JSON AND TRANSFORM TO DATAFRAME
 # =============================================================================    
-def load_json_and_transformorm_to_dataframe(location_list: List[str]):
+def load_json_and_transform_to_dataframe(location_list: List[str]):
     weather_data = {'hourly': {}, 'daily': {}}
     hourly_data = []
     daily_data = []
@@ -291,11 +291,15 @@ def get_closest_weather(df_fly: pd.DataFrame,
 
     '''
     
-    df_fly['closest_location'] = df_fly.apply(find_nearest_location, 
-                                              args=(weather_dict['coordinates'],), 
-                                              axis=1)
+    df_fly[['closest_location','location_altitude']] =\
+        df_fly.apply(find_nearest_location, 
+                     args=(weather_dict['coordinates'],), #Necesario args=(... , )Si quito la coma peta
+                     axis=1, 
+                     result_type='expand')
+        
     df_fly, _ = _join_fly_weather(weather_dict, df_fly, freq='hourly')
     df_fly, _ = _join_fly_weather(weather_dict, df_fly, freq='daily')
+    df_fly = _add_altitude_temperature(df_fly)
     return df_fly
 
 def find_nearest_location(row: pd.Series, 
@@ -303,7 +307,8 @@ def find_nearest_location(row: pd.Series,
     '''
     Given a row of a dataframe containing a Latitude and Longitude column
     and a Dataframe containing several locations with their respective
-    Latitudes and longitudes, returns the name of the closest location.
+    Latitudes, longitudes and altitudes, returns the name of the closest location, and the 
+    altitude of that vilage.
 
     Parameters
     ----------
@@ -326,7 +331,9 @@ def find_nearest_location(row: pd.Series,
                   for loc in location_coords]
     nearest_index = distances.index(min(distances))
     closest_location = locations_df.index.tolist()[nearest_index]
-    return closest_location
+    altitude = locations_df.loc[closest_location]['Altitude']
+
+    return closest_location, altitude
 
 
 
@@ -395,6 +402,29 @@ def _join_fly_weather(weather_dict: Dict[str, pd.DataFrame],
     data_joined = data_joined.drop(weather_merge_variables, axis=1)
     return data_joined, weather_variables
 
+def _add_altitude_temperature(df_fly: pd.DataFrame):
+    '''
+    Calculates the temperature at the heigth where the bird is at each point
+    In troposphere, temperature decreases linearly 6.5ºC each 1000m    
+
+    Parameters
+    ----------
+    df_fly : pd.DataFrame
+        data of Bird and village weather.
+
+    Returns
+    -------
+    df_fly : pd.DataFrame.
+        Same dataframe enriched with the temperature at the heigth where 
+        the bird is at each point
+    '''
+    base_temp = df_fly['tempC']
+    bird_altitude = df_fly['Altitude_m']
+    village_altitude = df_fly['location_altitude']
+    temperature_diference = -6.5*(bird_altitude-village_altitude)/1000
+    
+    df_fly['altitude_temperature'] = base_temp + temperature_diference
+    return df_fly
 
 # =============================================================================
 # UNUSED FUNCTIONS

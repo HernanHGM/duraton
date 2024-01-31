@@ -206,7 +206,7 @@ import geolocalizacion.weather as weather
 #     return weather_dict
 # %% 3. DEFINICION VARIABLES
 start_date = date(2020,1,1)
-end_date = date(2023,1,1)
+end_date = date(2024,1,21)
 
 location_list = ['Romangordo', 'Deleitosa', 'Torrecillas de la Tiesa', 
                   'Herguijuela', 'Conquista de la Sierra', 'Zorita', 
@@ -218,7 +218,7 @@ location_list = ['Romangordo', 'Deleitosa', 'Torrecillas de la Tiesa',
 # %% 4. DESCARGA DATOS
 weather.download_and_save_weather_data(location_list, start_date, end_date)
 # %% 5. CARGAMOS y TRANFORMAMOS DATOS
-weather_data = weather.load_json_and_transformorm_to_dataframe(location_list)
+weather_data = weather.load_json_and_transform_to_dataframe(location_list)
 # %% 6. GUARDAMOS DATOS
 weather.save_weather_dataframe(weather_data)
 

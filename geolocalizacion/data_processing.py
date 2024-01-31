@@ -97,17 +97,17 @@ def enriquecer(df : pd.DataFrame,
     df['week_number'] = pd.to_datetime(df['UTC_date'], format="%Y/%m/%d")\
                           .dt.strftime('%W')
                           
-    df['breeding_period'] = df['UTC_datetime'].apply(_categorize_breeding_period)
-                          
-    # corremos una posicion los datos de posicion
-    df['Latitude_lag'] = df['Latitude'].shift(-1)
-    df['Longitude_lag'] = df['Longitude'].shift(-1)
-    df['Altitude_m_lag'] = df['Altitude_m'].shift(-1)
+     
+    # corremos una posicion los datos GPS, _lag = dato de la posición previa
+    df['Latitude_lag'] = df['Latitude'].shift(1)
+    df['Longitude_lag'] = df['Longitude'].shift(1)
+    df['Altitude_m_lag'] = df['Altitude_m'].shift(1)
     # Calculamos distancias recorridas usando datos de posicion
+    # Dato actual - dato posición previa
     df = calculate_distance_intra_df(df,
-                                     'Latitude_lag', 'Latitude',
-                                     'Longitude_lag', 'Longitude',
-                                     'Altitude_m_lag', 'Altitude_m')   
+                                     'Latitude', 'Latitude_lag',
+                                     'Longitude', 'Longitude_lag',
+                                     'Altitude_m', 'Altitude_m_lag')   
 
     df['acc'] = np.sqrt(df.acc_x**2 + df.acc_y**2 + df.acc_z**2)
     df['mag'] = np.sqrt(df.mag_x**2 + df.mag_y**2 + df.mag_z**2)
@@ -116,29 +116,64 @@ def enriquecer(df : pd.DataFrame,
     info_pajaros = pd.DataFrame(info_archivos, columns=['specie','ID','name'])
     info_pajaros['color'] = pd.Series(['green', 'blue', 'purple', 'red', 'orange'])
     df = df.merge(info_pajaros, how = 'left', on = 'ID')
+    
+    df['breeding_period'] = df[['UTC_datetime','specie']].apply(_categorize_breeding_period, axis = 1)
+                     # ['UTC_datetime'].apply(_categorize_breeding_period)
 
     return df
 
-def _categorize_breeding_period(row : pd.Series):
+def _categorize_breeding_period(row : pd.DataFrame):
     '''
-    March, april, may, june and july compose the breeding period
-    The rest of months are no breeding perior
+    There are three breeding periods and a no breeding period, 4 categories
+    Based on the specie the dates change
 
     Parameters
     ----------
-    row : pd.Series
-        UTC_datetime column that contains the month of the data.
+    row : pd.DataFrame
+        UTC_datetime column contains the date.
+        specie column contains the specie.
 
     Returns
     -------
     period_value : str
-        breeding or no breeding period.
+        incubation, breeding, chick dependency or no breeding period.
 
     '''
-    if 3 <= row.month <= 7:  # Months from March to July
-        period_value = 'breeding'
-    else:
-        period_value = 'no breeding'
+    if row['specie'] == 'Aquila fasciata':
+        if (row['UTC_datetime'].month == 2 and row['UTC_datetime'].day >= 15) or \
+           (row['UTC_datetime'].month == 3 and row['UTC_datetime'].day <= 31):
+            period_value = 'incubation'
+            
+        elif (row['UTC_datetime'].month == 4 and row['UTC_datetime'].day >= 1) or \
+           (row['UTC_datetime'].month == 5 and row['UTC_datetime'].day <= 31):
+            period_value = 'breeding'
+
+        elif (row['UTC_datetime'].month == 6 and row['UTC_datetime'].day >= 1) or \
+           (row['UTC_datetime'].month == 7 and row['UTC_datetime'].day <= 31):
+            period_value = 'chick dependency'
+        else:
+            period_value = 'no breeding period'
+            
+    if (row['specie'] == 'Aquila adalberti') or \
+       (row['specie'] == 'Aquila chrisaetos'):
+        if (row['UTC_datetime'].month == 3 and row['UTC_datetime'].day >= 15) or \
+           (row['UTC_datetime'].month == 4 and row['UTC_datetime'].day <= 31):
+               #15 March 30 abril
+               period_value = 'incubation'
+            
+        elif (row['UTC_datetime'].month == 5 and row['UTC_datetime'].day >= 1) or \
+             (row['UTC_datetime'].month == 6 and row['UTC_datetime'].day <= 31) or \
+             (row['UTC_datetime'].month == 7 and row['UTC_datetime'].day <= 10):
+                 #1 May 10 July
+                 period_value = 'breeding'
+
+        elif (row['UTC_datetime'].month == 7 and row['UTC_datetime'].day >= 11) or \
+             (row['UTC_datetime'].month == 8 and row['UTC_datetime'].day <= 31):
+                 #11 July 31 August
+                 period_value = 'chick dependency'
+        else:
+            period_value = 'no breeding period'
+            
     return period_value
 
 
@@ -266,21 +301,6 @@ def deg_km(v):
     km_dif = 6370*rad_dif
     return km_dif  
 
-def calculate_distance(df1, df2):
-    lat_arr = df1.Latitude - df2.Latitude
-    d_lat = deg_km(lat_arr)
-    
-    long_arr = df1.Longitude - df2.Longitude
-    d_long = deg_km(long_arr)
-    
-    d_alt = (df1.Altitude_m - df2.Altitude_m)/1000
-    
-    distancias = pd.DataFrame()
-    distancias['3D'] = np.sqrt(d_lat**2 + d_long**2 + d_alt**2)
-    distancias['2D'] = np.sqrt(d_lat**2 + d_long**2) 
-    distancias['altura'] = d_alt
-    
-    return distancias
 
 def calculate_distance_intra_df(df, 
                                 col_latitude1, col_latitude2,
@@ -293,7 +313,7 @@ def calculate_distance_intra_df(df,
     long_arr = df[col_longitude1] - df[col_longitude2]
     d_long = deg_km(long_arr)
     
-    d_alt = abs(df[col_altitude1] - df[col_altitude2])/1000
+    d_alt = (df[col_altitude1] - df[col_altitude2])/1000
     
 
     df['distance_3D'] = np.sqrt(d_lat**2 + d_long**2 + d_alt**2)
