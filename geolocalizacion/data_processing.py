@@ -116,9 +116,8 @@ def enriquecer(df : pd.DataFrame,
     info_pajaros = pd.DataFrame(info_archivos, columns=['specie','ID','name'])
     info_pajaros['color'] = pd.Series(['green', 'blue', 'purple', 'red', 'orange'])
     df = df.merge(info_pajaros, how = 'left', on = 'ID')
-    
+
     df['breeding_period'] = df[['UTC_datetime','specie']].apply(_categorize_breeding_period, axis = 1)
-                     # ['UTC_datetime'].apply(_categorize_breeding_period)
 
     return df
 

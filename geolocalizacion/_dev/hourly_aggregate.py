@@ -28,8 +28,8 @@ problemas: datos duplicados, e intervalos con diferente numero de datos.
 import pandas as pd
 import numpy as np
 # %% LOAD PREPARED FILE
-path_load = "E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation_weather\\all_data.csv"
-# path_load = "E:/duraton/geolocalizacion/_data/fly/interpolated/all_interpolated_data_distances.csv"
+# path_load = "E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation_weather\\all_data.csv"
+path_load = "E:/duraton/geolocalizacion/_data/fly/interpolated/all_interpolated_data.csv"
 date_columns = ['UTC_datetime']
 df = pd.read_csv(path_load,
                  parse_dates = date_columns,
@@ -110,8 +110,8 @@ analysis = df_join.groupby(['name',
                             'hour',
                             'flying_situation']).size()
 # %% SAVE DATA                           
-save_path = "E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation_weather\\all_grouped_data.csv"
-# save_path = "E:\\duraton\\geolocalizacion\\_data\\fly\\interpolated\\all_interpolated_grouped_data.csv"
+# save_path = "E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation_weather\\all_grouped_data.csv"
+save_path = "E:\\duraton\\geolocalizacion\\_data\\fly\\interpolated\\all_interpolated_grouped_data.csv"
 df_join.to_csv(save_path,
                index=False,
                encoding="ISO-8859-1")

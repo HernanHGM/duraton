@@ -21,8 +21,8 @@ Save the interpolated data in one file for each bird
 2.- ALL BIRDS
 Load all interpolated birds data, filter it and save it in one unified file
 
-3.- INTERACTING BIRDS
-Load the unified file and save only the data from the interacting Birds
+3.- APPEND DISTANCES INTER BIRDS
+Add to all the birds, the distances towards the other birds
 """
 # %% IMPORT LIBRARIES
 import pandas as pd
@@ -37,7 +37,7 @@ if path_duraton not in sys.path:
     
 import geolocalizacion.data_processing as dp
 from geolocalizacion.flying_discrimination import FlightAnalyzer, UndefinedFlyClassifier
-import geolocalizacion.weather as weather
+from geolocalizacion.distances import add_distances_interbirds
 
 # %% INDIVIDUAL BIRDS DESCRIPTION
 # =============================================================================
@@ -56,11 +56,18 @@ df = pd.read_csv(path_elevation_weather,
                  parse_dates = ['UTC_datetime'],
                  index_col=False, 
                  encoding="ISO-8859-1")
-
+# In 2023 data there are plety of data with time_step 0 & 1s which do not 
+# apport information but slow dow the process
+df = df[(df.time_step_s>10)]
 # %% INTERPOLATE
 df_interpolated = dp.reindex_interpolate(df, freq = 5)
+# Drop columns that are empty due to interpolation
+# Drop rows where ID=null due to interpolation, 
+# because ID is used to refill empty columns
 df_interpolated = df_interpolated.drop(labels=['specie', 'name', 'color', 
-                                               'flying_situation'], axis=1)
+                                               'flying_situation'], 
+                                       axis=1)\
+                                 .dropna(subset=['ID'])
 # %% ENRICHMENT
 path_raw = f"{base_path}\\raw"
 filenames = dp.find_csv_filenames(path_raw)
@@ -125,19 +132,10 @@ print('Registros tras del filtrado: ', final_registers)
 porcentaje_desecho = round(100*(original_registers-final_registers)/original_registers, 2)
 print(f'Se han desechado un {porcentaje_desecho}% de los datos iniciales')
 
+# %% ADD distances INTERBIRDS
+datetime_cols = ['UTC_datetime']
+df_enriched = add_distances_interbirds(df_end, datetime_cols)
 
-# %% SAVE ALL FILES UNIFIED
+# %% SAVE DATA
 path_all= '\\'.join([interpolated_directory, 'all_interpolated_data.csv'])
-df_end.to_csv(path_all, index=False, encoding="ISO-8859-1")
-
-# %% INTERACTING BIRDS
-# =============================================================================
-# INTERACTING BIRDS
-# =============================================================================
-names_list = ['Conquista', 'Zorita']
-df_interaction = dp.get_same_data(df_end, names_list)
-# %% SAVE INTERACTIONS
-name_join = '_'.join(names_list)
-join_list = [interpolated_directory, 'interactions', f'{name_join}.csv']
-filepath_interactions = '\\'.join(join_list)
-df_interaction.to_csv(filepath_interactions, index=False, encoding="ISO-8859-1")
+df_enriched.to_csv(path_all, index=False, encoding="ISO-8859-1")
