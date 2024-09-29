@@ -205,16 +205,68 @@ import geolocalizacion.weather as weather
 #             weather_dict[filename] = csv_data
 #     return weather_dict
 # %% 3. DEFINICION VARIABLES
-start_date = date(2020,1,1)
-end_date = date(2024,1,21)
+start_date = date(2024,1,22)
+end_date = date(2024,2,28)
 
 location_list = ['Romangordo', 'Deleitosa', 'Torrecillas de la Tiesa', 
                   'Herguijuela', 'Conquista de la Sierra', 'Zorita', 
                   'Alcollarín', 'Abertura', 'Campo Lugar',
                   'Higuera de Albalat', 'Casas de Miravete', 'Almaraz', 
                   'Campillo de Deleitosa', 'Aldeacentenera', 'Madroñera', 
-                  'Trujillo', 'Garciaz', 'Santa Cruz de la Sierra']
-
+                  'Trujillo', 'Garciaz', 'Santa Cruz de la Sierra',
+                  "Casar de Cáceres",
+    "Santiago del Campo",
+    "Villar del Rey",
+    "Alburquerque",
+    "Puebla de Obando",
+    "Almoharín",
+    "Valdemorales",
+    "Montánchez",
+    "Arroyomolinos",
+    "Casas de Don Antonio",
+    "Albalá",
+    "Torre de Santa María",
+    "Casas de Don Pedro",
+    "Talarrubias",
+    "La Coronada",
+    "Orellana la Vieja",
+    "Esparragosa de Lares",
+    "Campanario",
+    "Quintana de la Serena",
+    "Castuera",
+    "Benquerencia de la Serena",
+    "Valle de la Serena",
+    "Higuera de la Serena",
+    "Guareña",
+    "Manchita",
+    "Don Álvaro",
+    "Valverde de Mérida",
+    "Villagonzalo",
+    "La Zarza",
+    "Oliva de Mérida",
+    "Palomas",
+    "Alange",
+    "Arroyo de San Serván",
+    "Valencia del Ventoso",
+    "Fuente de Cantos",
+    "Calera de León",
+    "Cabeza la Vaca",
+    "Montemolín",
+    "Monesterio",
+    "Santa Cruz del Retamar",
+    "Quismondo",
+    "Huecas",
+    "Rielves",
+    "Villamiel de Toledo",
+    "Gálvez",
+    "Menasalbas",
+    "Cuerva",
+    "Las Ventas con Peña Aguilera",
+    "Sonseca",
+    "Orgaz",
+    'Arroyomolinos',
+    'La Zarza'
+]
 # %% 4. DESCARGA DATOS
 weather.download_and_save_weather_data(location_list, start_date, end_date)
 # %% 5. CARGAMOS y TRANFORMAMOS DATOS

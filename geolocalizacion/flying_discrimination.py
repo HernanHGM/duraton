@@ -179,7 +179,7 @@ class FlightAnalyzer:
             list of consecutive index whose values meet the predefined condition.
     
         '''
-        freq_cum= np.cumsum(freq)
+        # freq_cum= np.cumsum(freq)
         # Fijamos el limite en percentil 90 porque el ~80% de los datos 
         # corresponden a datos de bajas velocidades <10kmh
         # y el ~20% restante a datos de altas velocidades >10kmh
@@ -187,17 +187,18 @@ class FlightAnalyzer:
         # los datos para no considerar la cola final de altas velocidades.
         # Evitamos esta cola final porque el error de ajuste aumenta, 
         # pero no hay duda de que son datos de vuelo y no posados
-        limit_uncertainty = np.argmax(freq_cum>0.9)
+        # limit_uncertainty = np.argmax(freq_cum>0.9)
+        limit_uncertainty = np.argmax(x>40)
         y1 = self._betabinomial(x, *fit_coefs[:3])
         y2 = self._betabinomial(x, *fit_coefs[3:])
         y3 = 2*abs(freq-(y1+y2))/(y1+y2+freq) #Diferencia/media multiplico *2 debido a la media
-        
         uncertain_values = utils.conditional_selection(y3[:limit_uncertainty], threshold, n, operation)
         if plot==True:
             plt.plot(x[:limit_uncertainty], y1[:limit_uncertainty], 'r.', label='Beta Binomial1')
             plt.plot(x[:limit_uncertainty], y2[:limit_uncertainty], 'b.', label='Beta Binomial1')
             if scaling==True:
                 scale = round(max(y3[:limit_uncertainty])/max(y2), -2)
+                scale = scale if scale >0 else 1
                 print(f'To improve data visualization 2*|true-pred|/(true+pred) has been scaled dividing by {scale}')
                 print(f'uncertainty threshold = {threshold}')
                 y3 = y3/scale
@@ -255,6 +256,7 @@ class FlightAnalyzer:
         Returns:
             pandas.DataFrame: DataFrame with added 'flying_situation' column.
         """
+
         max_uncertain_speed = int(max(uncertain_values))
         min_uncertain_speed = int(min(uncertain_values))
         

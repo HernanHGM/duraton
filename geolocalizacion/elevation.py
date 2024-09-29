@@ -340,8 +340,8 @@ class FlyElevationJoiner():
         unnamed_cols = [col for col in columns if 'Unnamed' in col]
         drop_cols = ['datatype', 'hdop',
                      'min_long', 'max_long',
-                     'min_lat', 'max_lat'] + unnamed_cols
-        df_joined = df_joined.drop(labels=drop_cols, axis=1)
+                     'min_lat', 'max_lat'] + unnamed_cols 
+        df_joined = df_joined.drop(labels=drop_cols, axis=1, errors='ignore')
         df_joined['bird_altitude'] = df_joined.Altitude_m - df_joined.elevation
         return df_joined
 

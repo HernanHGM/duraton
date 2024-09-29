@@ -49,7 +49,7 @@ the problems related with the interpolation. Finally the files are saved.
 To do it only is necessary to change the name of the bird to load
 '''
 # %% LOAD FILES
-nombre = 'Zorita'
+nombre = 'Conquista'
 base_path = "E:\\duraton\\geolocalizacion\\_data\\fly"
 path_elevation_weather = f"{base_path}\\enriquecida_elevation_weather\\{nombre}_elevation_weather.csv"
 df = pd.read_csv(path_elevation_weather,

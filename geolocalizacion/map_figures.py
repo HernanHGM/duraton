@@ -53,7 +53,7 @@ def get_sns_kernels(levels, gdf, col_name = 'ID', show = False):
         _, ax = plt.subplots(figsize=(20, 8))
         kdeplot = sns.kdeplot(x=subdf['Longitude'], y=subdf['Latitude'], ax=ax, **kwargs)
         kernels[ID] = kdeplot
-        print(str(ID) + 'calculated')
+        print(str(ID) + ' calculated')
     if show == False: 
         plt.close('all')
     
@@ -91,7 +91,7 @@ def get_gdf_kernels(sns_kernels, levels):
         kernel_df['ID'] = key
         kernel_gdf = gpd.GeoDataFrame(kernel_df, geometry='geometry', crs = 'epsg:4326')
         kernels_list.append(kernel_gdf)
-        print('kernel' + str(key) + 'transformed')
+        print('kernel ' + str(key) + ' transformed')
     gdf_kernels = pd.concat(kernels_list)  
     
     return(gdf_kernels)
@@ -177,9 +177,9 @@ def add_markers(gdf, m):
         color = colors[row['ID']]
         txt = f'''Bird ID: {row["ID"]} <br> 
                   Time: {row["UTC_datetime"]} <br>
-                  Nombre: {row["nombre"]} <br>
+                  Name: {row["name"]} <br>
                   ID: {row["ID"]} <br>
-                  Especie: {row["especie"]} <br>
+                  Specie: {row["specie"]} <br>
         '''
         folium.Marker(location = [row['Latitude'], row['Longitude']], 
                       icon = folium.Icon(color=color),
@@ -189,8 +189,8 @@ def add_kernels(gdf, base_map):
     custom_scale = gdf['level'].unique().tolist()
     custom_scale.append(1)
     fill_color = gdf['color_map'].mode()[0]
-    especie = gdf['especie'].mode()[0].lower()
-    legend_name = 'Probabilidad de aparición ' + especie
+    specie = gdf['specie'].mode()[0].lower()
+    legend_name = 'Probabilidad de aparición ' + specie
 
     cp = folium.Choropleth(
         geo_data=gdf,
@@ -205,11 +205,11 @@ def add_kernels(gdf, base_map):
         legend_name=legend_name
     ).add_to(base_map) 
     
-    folium.GeoJsonTooltip(['nombre', 'especie', 'level', 'start_date', 'end_date']).add_to(cp.geojson)
+    folium.GeoJsonTooltip(['name', 'specie', 'level', 'start_date', 'end_date']).add_to(cp.geojson)
 
 def add_animated_points (df, m, df_kernels = None):
     if df_kernels is not None:
-        for ID, subdf in df_kernels.groupby('especie'):
+        for ID, subdf in df_kernels.groupby('specie'):
             add_kernels(subdf, m)
             
     features = [
@@ -221,7 +221,7 @@ def add_animated_points (df, m, df_kernels = None):
             },
             "properties": {
                 "time": row["UTC_datetime"].strftime('%Y-%m-%d %H:%M:%S'),
-                "popup": row["nombre"],
+                "popup": row["name"],
                 'icon': 'circle',
                 'iconstyle':{
                        'fillColor': row['color'],

@@ -1,3 +1,4 @@
+# %% DESCRIPTION
 # -*- coding: utf-8 -*-
 """
 Created on Mon Oct 30 19:04:08 2023
@@ -27,9 +28,16 @@ problemas: datos duplicados, e intervalos con diferente numero de datos.
 # %% IMPORT LIBRARIES
 import pandas as pd
 import numpy as np
+# %% DATA TYPE
+# interpolated, raw
+paths_dict = {'interpolated': {'load':"E:\\duraton\\geolocalizacion\\_data\\fly\\interpolated\\all_interpolated_data.csv",
+                               'save':"E:\\duraton\\geolocalizacion\\_data\\fly\\interpolated\\all_interpolated_grouped_data.csv"},
+              'raw': {'load': "E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation_weather\\all_data.csv",
+                      'save': "E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation_weather\\all_grouped_data.csv"},
+            } 
+data_type = 'raw'
 # %% LOAD PREPARED FILE
-# path_load = "E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation_weather\\all_data.csv"
-path_load = "E:/duraton/geolocalizacion/_data/fly/interpolated/all_interpolated_data.csv"
+path_load = paths_dict[data_type]['load']
 date_columns = ['UTC_datetime']
 df = pd.read_csv(path_load,
                  parse_dates = date_columns,
@@ -42,20 +50,20 @@ if all(x in df.columns for x in distances):
 else:
     distances = []
 # %% DEFINE COLUMNS
-gby_columns = ['specie', 'name', 'month_name', 
-               'month_number', 'week_number', 
+gby_columns = ['specie', 'name', 'breeding_period', 
+               'month_name', 'month_number', 'week_number', 
                'UTC_date', 'hour',
                'flying_situation']
-mean_columns = ['Latitude', 'Longitude', 'Altitude_m', 
+mean_columns = ['Latitude', 'Longitude', 'Altitude_m',
                 'mag_x', 'mag_y', 'mag_z', 'mag',
                 'acc_x', 'acc_y', 'acc_z', 'acc', 
                 'bird_altitude', 'speed_km_h',
-                'elevation', 'direction_deg',
+                'elevation', 
                 'tempC', 'DewPointC',
        'windspeedKmph', 'pressure', 'visibility', 'cloudcover', 'precipMM',
        'humidity', 'maxtempC', 'mintempC', 'avgtempC', 'sunHour',
        'totalSunHour', 'uvIndex'] + distances
-
+# Direction_deg dropped
 sum_columns = ['time_step_s', 'distance_2D']
 
 
@@ -105,16 +113,67 @@ df_join['distance_ascended_positive_by_hour'] = 3600*df_join['distance_ascended_
 
 # %% ANALYSIS DATA
 # There should be just one register per aggrupation because it is the Primay Key
-analysis = df_join.groupby(['name', 
+print('Individuals by specie: \n', df_join.groupby(['specie'])['name'].nunique())
+print('Registers by specie: \n', df_join.groupby(['specie']).size())
+pk_analysis = df_join.groupby(['name', 
                             'UTC_date',
                             'hour',
                             'flying_situation']).size()
-# %% SAVE DATA                           
-# save_path = "E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation_weather\\all_grouped_data.csv"
-save_path = "E:\\duraton\\geolocalizacion\\_data\\fly\\interpolated\\all_interpolated_grouped_data.csv"
+print('Primary Key values are not duplicated:', pk_analysis.all())
+
+df_join.groupby(['specie', 'name']).size()
+
+# %% SAVE DATA  
+save_path = paths_dict[data_type]['save']                    
 df_join.to_csv(save_path,
                index=False,
                encoding="ISO-8859-1")
+
+# %% ADD DISTANCE TO BIRDS TO GROUPED RAW TABLE (UNUSED)
+# =============================================================================
+# DESUSO
+# =============================================================================
+'''
+Esta parte era útil cuando  queríamos entender como la distancia entre 
+individuos afectaba al vuelo de los individuos cercanos.
+Pero al contar con tantos individuos, unos siendo parejas del mismo territorio
+y otros tann lejanos entre sí, carece de sentido
+'''
+ 
+path_load = paths_dict['interpolated']['save']
+df_agg_interpolated = pd.read_csv(path_load,
+                 index_col=False, 
+                 encoding="ISO-8859-1")
+
+path_load = paths_dict['raw']['save']
+df_agg_raw = pd.read_csv(path_load,
+                 index_col=False, 
+                 encoding="ISO-8859-1")
+
+# %% MERGE KM TO GROUPED RAW TABLE (UNUSED)
+df_distances = df_agg_interpolated[['name', 
+                            'UTC_date',
+                            'hour',
+                            'flying_situation',
+                            'km_Conquista', 'km_Deleitosa', 'km_Gato', 'km_Navilla', 'km_Zorita']]
+df_complete = pd.merge(df_agg_raw, df_distances, 
+                       how='left',
+                       on = ['name', 'UTC_date', 'hour', 'flying_situation'])
+
+# %% SAVE GROUPED RAW WITH DISTANCES (UNUSED)
+df_complete.to_csv("E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation_weather\\all_grouped_data_distances.csv",
+               index=False,
+               encoding="ISO-8859-1")
+# %% CHECK MERGED (UNUSED)
+hour_condition = (df_complete.hour == '14:00:00')
+date_condition = (df_complete.UTC_date == '2022-10-16')
+all_condidtion = hour_condition & date_condition
+a = df_complete[all_condidtion]
+
+hour_condition = (df_agg_interpolated.hour == '14:00:00')
+date_condition = (df_agg_interpolated.UTC_date == '2022-10-16')
+all_condidtion = hour_condition & date_condition
+b = df_agg_interpolated[all_condidtion]
 # %% MOVING GROUPBY (UNUSED)
 
 ma_2h = df\

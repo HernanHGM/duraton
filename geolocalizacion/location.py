@@ -52,7 +52,7 @@ def _get_location_info(municipio):
             'Longitude': longitud_value,
             'Altitude': altitude_value
         }
-        
+        print(municipio, ' okey')
         return municipio_info  # Devolver la información en formato JSON
 
     except requests.exceptions.RequestException as e:

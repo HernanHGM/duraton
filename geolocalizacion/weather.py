@@ -16,7 +16,7 @@ import requests
 import os
 from typing import Dict, List
 
-from flask import Flask, jsonify
+from flask import Flask
 # %% 2. CREACION FUNCIONES
 
 # =============================================================================
@@ -103,17 +103,7 @@ def _get_new_date(data):
     last_date_datetime = datetime.strptime(last_date, '%Y-%m-%d').date()
     new_date = last_date_datetime + timedelta(days=1)
     
-    return new_date 
-# def _get_new_date(data):
-#     # Obtener la última fecha
-#     last_date = data['data']['weather'][-1]['date']
-
-#     # Crear una variable new_date con un día más que la última fecha
-#     last_date_datetime = datetime.strptime(last_date, '%Y-%m-%d')
-#     new_date_datetime = last_date_datetime + timedelta(days=1)
-#     new_date = new_date_datetime.strftime('%Y-%m-%d')
-    
-#     return new_date    
+    return new_date    
 
 # =============================================================================
 # LOAD JSON AND TRANSFORM TO DATAFRAME
@@ -297,8 +287,10 @@ def get_closest_weather(df_fly: pd.DataFrame,
                      axis=1, 
                      result_type='expand')
         
-    df_fly, _ = _join_fly_weather(weather_dict, df_fly, freq='hourly')
-    df_fly, _ = _join_fly_weather(weather_dict, df_fly, freq='daily')
+    reduced_weather_dict = _select_useful_locations(weather_dict, df_fly)
+    
+    df_fly, _ = _join_fly_weather(reduced_weather_dict, df_fly, freq='hourly')
+    df_fly, _ = _join_fly_weather(reduced_weather_dict, df_fly, freq='daily')
     df_fly = _add_altitude_temperature(df_fly)
     return df_fly
 
@@ -329,15 +321,29 @@ def find_nearest_location(row: pd.Series,
                                 locations_df['Longitude']))
     distances = [geodesic((row['Latitude'], row['Longitude']), loc).kilometers\
                   for loc in location_coords]
+        
     nearest_index = distances.index(min(distances))
     closest_location = locations_df.index.tolist()[nearest_index]
     altitude = locations_df.loc[closest_location]['Altitude']
 
     return closest_location, altitude
 
+def _select_useful_locations(weather_dict: Dict[str, pd.DataFrame],
+                             df_fly: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+    useful_locations = list(df_fly['closest_location'].unique())
+    
+    w_h = weather_dict['hourly'].copy()
+    w_h = w_h[w_h['location'].isin(useful_locations)]
+    
+    w_d = weather_dict['daily'].copy()
+    w_d = w_d[w_d['location'].isin(useful_locations)]
+    
+    reduced_weather_dict = {'hourly': w_h,
+                            'daily': w_d}
+    return reduced_weather_dict
+    
 
-
-def _join_fly_weather(weather_dict: Dict[str, pd.DataFrame],
+def _join_fly_weather(reduced_weather_dict: Dict[str, pd.DataFrame],
                       df_fly: pd.DataFrame,
                       freq: str):
     """
@@ -376,7 +382,7 @@ def _join_fly_weather(weather_dict: Dict[str, pd.DataFrame],
     The function returns the resulting DataFrame with the combined data and 
     a list of weather variables that have been included in the combination.
     """
-    df_weather = weather_dict[freq]
+    df_weather = reduced_weather_dict[freq]
     
     if freq == 'hourly':
         weather_variables = ['tempC', 'DewPointC', 
@@ -405,7 +411,9 @@ def _join_fly_weather(weather_dict: Dict[str, pd.DataFrame],
 def _add_altitude_temperature(df_fly: pd.DataFrame):
     '''
     Calculates the temperature at the heigth where the bird is at each point
-    In troposphere, temperature decreases linearly 6.5ºC each 1000m    
+    In troposphere, temperature decreases linearly 10ºC each 1000m in the lower 
+    layer of the troposphere
+    https://link.springer.com/chapter/10.1007/978-3-030-13307-8_24
 
     Parameters
     ----------
@@ -421,7 +429,7 @@ def _add_altitude_temperature(df_fly: pd.DataFrame):
     base_temp = df_fly['tempC']
     bird_altitude = df_fly['Altitude_m']
     village_altitude = df_fly['location_altitude']
-    temperature_diference = -6.5*(bird_altitude-village_altitude)/1000
+    temperature_diference = -10*(bird_altitude-village_altitude)/1000
     
     df_fly['altitude_temperature'] = base_temp + temperature_diference
     return df_fly

@@ -20,10 +20,6 @@ path = "E:\\duraton\\geolocalizacion\\_data\\fly\\raw"
 filenames = dp.find_csv_filenames(path)
 df_ornitela = dp.load_data(path, filenames, reindex_data=False)
 
-# Carpeta con los csvs completos con los que se trabajo
-path = "E:\\duraton\\geolocalizacion\\_data\\fly\\raw\\completos"
-filenames = dp.find_csv_filenames(path)
-df_ornitela2 = dp.load_data(path, filenames, reindex_data=False)
 
 # Carpeta con los csvs completos con los que se trabajo, una vez añadida la elevación
 path = "E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation"
@@ -41,7 +37,6 @@ names_list = list(df_ornitela.name.unique())
 for name in names_list:
     df_1 = df_ornitela[df_ornitela['name']==name]
     df_2 = df_movebank[df_movebank['individual-local-identifier']==name]
-    df_3 = df_ornitela2[df_ornitela2['name']==name]
     
     df_4 = df_ornitela3[df_ornitela3['name']==name]
 
@@ -50,7 +45,6 @@ for name in names_list:
     df3['timestamp'] = pd.to_datetime(df3['timestamp'], format='%Y%m%d %H:%M:%S')
     print('Nuevo: ', name, min(df3['timestamp']), max(df3['timestamp']))
     print('Antiguo: ', name, min(df_1['UTC_datetime']), max(df_1['UTC_datetime']))
-    print('Antiguo completo: ', name, min(df_3['UTC_datetime']), max(df_3['UTC_datetime']))
     print('elevation: ', name, min(df_4['UTC_datetime']), max(df_4['UTC_datetime']))
     print()
 # %%

@@ -18,11 +18,13 @@ def find_csv_filenames(path_to_dir, suffix=".csv"):
     filenames = os.listdir(path_to_dir)
     return [filename for filename in filenames if filename.endswith(suffix)]
 
-def load_data(path: str, 
-              filenames: List[str], 
-              pre_process: bool=True,
-              reindex_data: bool=True,
-              freq: int=5):
+def load_preprocess_data(folder_path: str, 
+                          filenames: List[str], 
+                          origin: str='movebank',
+                          birds_info_path: str="E:\\duraton\\geolocalizacion\\_data\\fly\\raw\\birds_info.xlsx",
+                          pre_process: bool=True,
+                          reindex_data: bool=True,
+                          freq: int=5):
     """
     Load and process data from multiple CSV files and return a combined DataFrame.
     
@@ -34,7 +36,14 @@ def load_data(path: str,
     filenames : List[str]
         A list of file names inside the directory provided by path
         to be loaded and processed.
-    
+        
+    origin : str
+        Indicates the origin of the data. It accepts the values:
+            'ornitela' or 'movebank'.
+            
+    birds_info_path : str
+        excel path containg a table with the name and specie corresponding to each ID
+        
     pre_process : bool, optional
         Whether to perform data pre-processing. Default is True.
     
@@ -51,16 +60,12 @@ def load_data(path: str,
         A combined DataFrame containing data from multiple CSV files.
     """
     # join root_path and filenames into full path
-    full_filenames = (path + '\\' + name for name in filenames) 
+    full_filepaths = (folder_path + '\\' + filename for filename in filenames) 
     
     li = []
-    date_columns = ['UTC_datetime']
-    for name in full_filenames:
-        print(name)
-        df = pd.read_csv(name, 
-                         parse_dates = date_columns, 
-                         index_col=False,
-                         encoding="ISO-8859-1")
+    for filepath in full_filepaths:
+        print(filepath)
+        df = read_adjust_files(filepath, origin)
         df = _clean_unnamed(df)
         print('N registers: ', df.shape[0])
         if pre_process == True:
@@ -71,10 +76,71 @@ def load_data(path: str,
             df = reindex_interpolate(df, freq = freq)
             print(freq)
         if pre_process == True:
-            df = enriquecer(df, filenames)
+            df = enriching(df, birds_info_path)
         li.append(df)
     
     df = pd.concat(li, axis=0, ignore_index=True)
+    return df
+
+def read_adjust_files(filepath: str,
+                      origin: str)-> pd.DataFrame:
+    '''
+    Due to the different types of data structures based on its origin: Ornitella
+    or Movebank, this function adjust the columns of movebank structure to the 
+    Ornitella's structure
+
+    Parameters
+    ----------
+    filepath : str
+        path where the csv is stored.
+    origin : str
+        Indicates the origin of the data. It accepts the values:
+            'ornitela' or 'movebank'.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        dataframe normalized to the same structure.
+
+    '''
+
+    
+    if origin=='movebank':
+        df = pd.read_csv(filepath,
+                         parse_dates = ["timestamp"], 
+                         index_col=False,
+                         encoding="utf-8")
+        columns_mapping = {"tag-local-identifier":"ID",
+                          "timestamp": "UTC_datetime", 
+                          "gps:satellite-count": "satcount", 
+                          "location-lat": "Latitude", 
+                          "location-long": "Longitude", 
+                          "height-above-msl": "Altitude_m", 
+                          "ground-speed": "speed_km_h", 
+                          "mag:magnetic-field-raw-x": "mag_x", 
+                          "mag:magnetic-field-raw-y": "mag_y", 
+                          "mag:magnetic-field-raw-z": "mag_z", 
+                          "acceleration-raw-x": "acc_x", 
+                          "acceleration-raw-y": "acc_y", 
+                          "acceleration-raw-z": "acc_z"}        
+    
+        # Usar el diccionario de mapeo para renombrar las columnas en tu DataFrame
+        df.rename(columns=columns_mapping, inplace=True)
+        df['UTC_date'] = df.UTC_datetime.dt.date
+        df['UTC_time'] = df.UTC_datetime.dt.time
+        df['speed_km_h'] = df['speed_km_h']*3.6 #Movebank uses m/s
+        useful_variables = list(columns_mapping.values()) + ['UTC_date', 'UTC_time']
+        df = df[useful_variables]
+    
+    elif origin=='ornitela':
+        df = pd.read_csv(filepath,
+                         parse_dates = ['UTC_datetime'], 
+                         index_col=False,
+                         encoding="ISO-8859-1")
+    else:
+        raise ValueError(f'origin accepts "ornitela" or "movebank" but "{origin}" was received')
+    
+
     return df
 
 def _clean_unnamed(df):
@@ -83,13 +149,13 @@ def _clean_unnamed(df):
     df = df.drop(labels=unnamed_cols, axis=1)
     return df
 
-def enriquecer(df : pd.DataFrame, 
-                filenames: List[str]):
+def enriching(df : pd.DataFrame, 
+               birds_info_path: str):
     # Añadimos la columna de hora
     df = df.assign(hour=df.UTC_datetime.dt.strftime('%H'))
     df['hour']= pd.to_datetime(df['hour'], format='%H').dt.time.astype(str)
-    df['UTC_datetime_pre'] = df['UTC_datetime'].shift(-1)
-    df['time_step_s'] = (df['UTC_datetime_pre']-df['UTC_datetime']).dt.seconds
+    df['UTC_datetime_pre'] = df['UTC_datetime'].shift(1)
+    df['time_step_s'] = (df['UTC_datetime']-df['UTC_datetime_pre']).dt.seconds
     df['month_name'] = pd.to_datetime(df['UTC_date'], format="%Y/%m/%d")\
                          .dt.strftime('%B')
     df['month_number'] = pd.to_datetime(df['UTC_date'], format="%Y/%m/%d")\
@@ -112,10 +178,9 @@ def enriquecer(df : pd.DataFrame,
     df['acc'] = np.sqrt(df.acc_x**2 + df.acc_y**2 + df.acc_z**2)
     df['mag'] = np.sqrt(df.mag_x**2 + df.mag_y**2 + df.mag_z**2)
     
-    info_archivos = list(map(extract_info, filenames))
-    info_pajaros = pd.DataFrame(info_archivos, columns=['specie','ID','name'])
-    info_pajaros['color'] = pd.Series(['green', 'blue', 'purple', 'red', 'orange'])
-    df = df.merge(info_pajaros, how = 'left', on = 'ID')
+    # Add name and specie
+    df_birds_info = pd.read_excel(birds_info_path)
+    df = df.merge(df_birds_info, how = 'left', on = 'ID')
 
     df['breeding_period'] = df[['UTC_datetime','specie']].apply(_categorize_breeding_period, axis = 1)
 
@@ -153,8 +218,8 @@ def _categorize_breeding_period(row : pd.DataFrame):
         else:
             period_value = 'no breeding period'
             
-    if (row['specie'] == 'Aquila adalberti') or \
-       (row['specie'] == 'Aquila chrisaetos'):
+    elif (row['specie'] == 'Aquila adalberti') or \
+       (row['specie'] == 'Aquila chrysaetos'):
         if (row['UTC_datetime'].month == 3 and row['UTC_datetime'].day >= 15) or \
            (row['UTC_datetime'].month == 4 and row['UTC_datetime'].day <= 31):
                #15 March 30 abril
@@ -172,16 +237,60 @@ def _categorize_breeding_period(row : pd.DataFrame):
                  period_value = 'chick dependency'
         else:
             period_value = 'no breeding period'
+    else:
+        raise ValueError(f"specie accepts Aquila adalberti, Aquila chrysaetos or Aquila fasciata but {row['specie']} was received")
             
     return period_value
 
 
+
+
+def create_bird_info_table(folder_path: str, save_path: str):
+    '''
+    Creates quiqly a table info from all the birds in .csv format saved in 
+    a certain folder. The data stored is the ID, name of the bird and its specie 
+
+    Parameters
+    ----------
+    folder_path : str
+        path of the folder where all the .csv are stores
+    save_path : str
+        path wher the excel containing the birds information will be saved.
+
+    Returns
+    -------
+    None.
+
+    '''
+    filenames = find_csv_filenames(folder_path)
+    
+    full_filepaths = (folder_path + '\\' + filename for filename in filenames) 
+    
+    li = []
+    for filepath in full_filepaths:
+        print(filepath)
+        df = pd.read_csv(filepath, 
+                         index_col=False,
+                         encoding="utf-8")
+        specie = df["individual-taxon-canonical-name"].unique()[0]
+        ID = df["tag-local-identifier"].unique()
+        if len(ID)>1:
+            print(ID) #This never should be printed, just on bird by file
+        ID = ID[0]
+        name = df["individual-local-identifier"].unique()[0]
+        li.append((specie, ID, name))
+    
+    
+    df_info = pd.DataFrame(li, columns =['specie', 'ID', 'name'])
+    df_info.to_excel(save_path, index=False, header=True)
+ 
+# UNUSED. A table containig containig explicitly the information has been created
 def extract_info(nombre_archivo):
     nombre_limpio = nombre_archivo.replace('.csv', '')
     partes = nombre_limpio.split('_')
     
     conversor_especie={'Aquada': 'Aquila adalberti',
-                        'Aquchr': 'Aquila chrisaetos',
+                        'Aquchr': 'Aquila chrysaetos',
                         'Aqufas': 'Aquila fasciata'}
     
     especie = conversor_especie[partes[0]]
@@ -243,7 +352,32 @@ def _equal_index(df : pd.DataFrame,
 
  
 def _remove_nulls(df, freq = 5):
+    """
+    Remove rows from a DataFrame based on specified conditions related to null values and time.
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        The DataFrame from which rows are to be removed.
+    freq : int, optional
+        The frequency for time conditions, by default 5.
+    
+    Returns:
+    --------
+    pandas.Series
+        A boolean series indicating the rows to be removed (True) or 
+        kept (False).
+    
+    Notes:
+    ------
+    - The function combines conditions related to the number of null values 
+    in a rolling window and specific time conditions.
+    - Rows satisfying the combined conditions are marked as True, 
+    and the resulting Series can be used for filtering the DataFrame.
+    """
     # Get rows where too much columns are null
+    # When the period between two data is over one hour, the intermedium 
+    # interpolated data will be erased. Is too much time to be a realistic interpolation
     threshold = int(60/freq)
     n_nulls = df['ID'].isna().rolling(threshold, center=False).sum()
     # shift -threshold + 2 pq threshold solo borraria el último valor con dato

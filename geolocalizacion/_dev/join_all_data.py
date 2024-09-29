@@ -23,7 +23,11 @@ import geolocalizacion.data_processing as dp
 path= "E:\\duraton\\geolocalizacion\\_data\\fly\\enriquecida_elevation_weather"
 filenames = dp.find_csv_filenames(path)
 filenames = [item for item in filenames if 'all' not in item]
-df = dp.load_data(path, filenames, reindex_data=False, pre_process=False)
+df = dp.load_preprocess_data(path, filenames,
+                             origin='ornitela',
+                             reindex_data=False, 
+                             pre_process=False)
+# df = dp.load_data(path, filenames, reindex_data=False, pre_process=False)
 
 # %% ANALIZE
 
@@ -63,6 +67,12 @@ print('Registros antes del filtrado: ', original_registers)
 print('Registros tras del filtrado: ', final_registers)
 porcentaje_desecho = round(100*(original_registers-final_registers)/original_registers, 2)
 print(f'Se han desechado un {porcentaje_desecho}% de los datos iniciales')
+
+# %% CHECK NAN VALUES
+na_values = df_end.isnull().sum()
+print(na_values)
+
+df_end = df_end.dropna(axis=1, how='any')
 
 # %% SAVE ALL FILES UNIFIED
 path_all= '\\'.join([path, 'all_data.csv'])
